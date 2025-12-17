@@ -1,3 +1,12 @@
 package internal
 
-type APIClient struct{}
+import (
+	"net/http"
+	"time"
+)
+
+type APIClient struct {
+	APIEndpoint string
+
+	httpClient *http.Client
+}
