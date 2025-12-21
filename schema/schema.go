@@ -1,37 +1,41 @@
 package schema
 
+import (
+	"fmt"
+	"reflect"
+
+	"github.com/google/uuid"
+)
+
 type Schema struct {
 	name   string
-	fields map[string]*Field
+	fields Model
 }
 
-type RecordField struct {
-	name       string
-	typ        FieldType
-	value      any
-	searchable bool
+type GardbMeta struct {
+	schema    *Schema
+	values    map[string]any
+	id        string
+	CreatedAt int64
+	UpdatedAt int64
 }
 
-type Record struct {
-	schema *Schema
-	fields []RecordField
+func (m *GardbMeta) ID() string {
+	return m.id
 }
 
-func New(name string) *Schema {
+type Model map[string]*Field
+
+func New(name string, model Model) *Schema {
+	fields := make(map[string]*Field, len(model))
+	for fieldName, field := range model {
+		field.name = fieldName
+		fields[fieldName] = field
+	}
 	return &Schema{
 		name:   name,
-		fields: make(map[string]*Field),
+		fields: fields,
 	}
-}
-
-func (s *Schema) Field(name string, f *Field) *Schema {
-	f.name = name
-	s.fields[name] = f
-	return s
-}
-
-func (s *Schema) Fields() map[string]*Field {
-	return s.fields
 }
 
 func (s *Schema) Name() string {
