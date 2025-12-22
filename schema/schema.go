@@ -43,17 +43,13 @@ func (s *Schema) Name() string {
 }
 
 func (s *Schema) New(ptrToStruct any) error {
+	rv := reflect.ValueOf(ptrToStruct)
 	// Validate that ptrToStruct is a pointer to a struct
-	if reflect.TypeOf(ptrToStruct).Kind() != reflect.Ptr || reflect.TypeOf(ptrToStruct).Elem().Kind() != reflect.Struct {
+	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Struct {
 		return fmt.Errorf("expected pointer to struct")
 	}
 
-	// Validate that struct fields match schema fields by comparing lengths
-	if reflect.ValueOf(ptrToStruct).Elem().NumField() != len(s.fields) {
-		return fmt.Errorf("struct does not match schema fields")
-	}
-
-	rv := reflect.ValueOf(ptrToStruct).Elem()
+	rv = rv.Elem()
 	rt := rv.Type()
 
 	values := make(map[string]any, len(s.fields))
@@ -74,6 +70,10 @@ func (s *Schema) New(ptrToStruct any) error {
 
 		// Apply defaults
 		if val.IsZero() && sField.defaultValue != nil {
+			dv := reflect.ValueOf(sField.defaultValue)
+			if !dv.Type().AssignableTo(val.Type()) {
+				return fmt.Errorf("default value type mismatch for field %s", tag)
+			}
 			val.Set(reflect.ValueOf(sField.defaultValue))
 		}
 		// Check required and type
@@ -98,7 +98,7 @@ func (s *Schema) New(ptrToStruct any) error {
 	// Add GardbMeta to the struct
 	metaField := reflect.ValueOf(ptrToStruct).Elem().FieldByName("GardbMeta")
 	if metaField.IsValid() && metaField.CanSet() {
-		meta := &GardbMeta{
+		meta := GardbMeta{
 			schema: s,
 			id:     uuid.New().String(),
 			values: values,

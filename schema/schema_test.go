@@ -27,4 +27,10 @@ func TestSchema_New(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create user: %v", err)
 	}
+
+	if user.ID() == "" {
+		t.Errorf("Expected user ID to be set")
+	}
+
+	t.Logf("Created user with ID: %s", user.ID())
 }
