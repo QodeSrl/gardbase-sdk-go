@@ -92,7 +92,6 @@ func (c *APIClient) Put(ctx context.Context, obj any, dek crypto.GeneratedDEK) e
 		return err
 	}
 
-	// body should be reqBody
 	req, err := http.NewRequestWithContext(ctx, "POST", c.APIEndpoint+"/objects", bytes.NewReader(reqBody))
 	if err != nil {
 		return err
@@ -143,7 +142,47 @@ func (c *APIClient) Put(ctx context.Context, obj any, dek crypto.GeneratedDEK) e
 
 // 1. Send a GET request to the API with the given ID
 // 2. Parse the API response
-// 3.
-func (c *APIClient) Get(id string) (any, error) {
+// 3. Get object from S3 using the presigned URL
+func (c *APIClient) Get(ctx context.Context, id string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", c.APIEndpoint+"/objects/"+id, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get object, status code: %d", resp.StatusCode)
+	}
+	respBody := models.GetObjectResponse{}
+	err = json.NewDecoder(resp.Body).Decode(&respBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err = http.NewRequestWithContext(ctx, "GET", respBody.GetURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	resp, err = c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get object from S3, status code: %d", resp.StatusCode)
+	}
+
+	encryptedObj := new(bytes.Buffer)
+	_, err = encryptedObj.ReadFrom(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return encryptedObj.Bytes(), nil
 }
