@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"reflect"
 	"time"
 
 	"github.com/QodeSrl/gardbase-sdk-go/schema"
@@ -98,45 +97,67 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 	}
 
 	return respBody, nil
+}
+
+type GetObjectResult struct {
+	EncryptedObj []byte
+	DEK          []byte
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// Get retrieves an encrypted object by its ID and returns the encrypted payload.
+func (c *APIClient) Get(ctx context.Context, id string) (GetObjectResult, error) {
+	// Call the API and get the object metadata and S3 URL
 	req, err := http.NewRequestWithContext(ctx, "GET", c.APIEndpoint+"/objects/"+id, nil)
 	if err != nil {
-		return nil, err
+		return GetObjectResult{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return GetObjectResult{}, err
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get object, status code: %d", resp.StatusCode)
+		return GetObjectResult{}, fmt.Errorf("failed to get object, status code: %d", resp.StatusCode)
 	}
 	respBody := models.GetObjectResponse{}
 	err = json.NewDecoder(resp.Body).Decode(&respBody)
 	if err != nil {
-		return nil, err
+		return GetObjectResult{}, err
 	}
 
+	// Download the encrypted object from S3
 	req, err = http.NewRequestWithContext(ctx, "GET", respBody.GetURL, nil)
 	if err != nil {
-		return nil, err
+		return GetObjectResult{}, err
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 	resp, err = c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return GetObjectResult{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get object from S3, status code: %d", resp.StatusCode)
+		return GetObjectResult{}, fmt.Errorf("failed to get object from S3, status code: %d", resp.StatusCode)
 	}
 
-	encryptedObj := new(bytes.Buffer)
-	_, err = encryptedObj.ReadFrom(resp.Body)
+	buf := new(bytes.Buffer)
+	_, err = buf.ReadFrom(resp.Body)
 	if err != nil {
-		return nil, err
+		return GetObjectResult{}, err
+	}
+	dek, err := base64.StdEncoding.DecodeString(respBody.EncryptedDEK)
+	if err != nil {
+		return GetObjectResult{}, err
 	}
 
-	return encryptedObj.Bytes(), nil
+	// Build and return the result
+	return GetObjectResult{
+		EncryptedObj: buf.Bytes(),
+		DEK:          dek,
+		CreatedAt:    respBody.CreatedAt,
+		UpdatedAt:    respBody.UpdatedAt,
+	}, nil
 }
