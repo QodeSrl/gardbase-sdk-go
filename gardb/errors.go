@@ -49,4 +49,7 @@ var (
 	// Session errors
 	ErrSessionExpired = fmt.Errorf("session expired")
 	ErrSessionInvalid = fmt.Errorf("session invalid")
+
+	// Object errors
+	ErrInvalidObjectType = fmt.Errorf("invalid object type; must be pointer to struct with GardbMeta field")
 )
