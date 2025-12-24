@@ -3,10 +3,12 @@ package internal
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/QodeSrl/gardbase/pkg/crypto"
+	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 )
 
 type EnclaveClient struct {
@@ -107,4 +109,28 @@ func (ec *EnclaveClient) GenerateDEK(ctx context.Context, count int) ([]crypto.G
 	defer ec.essMu.RUnlock()
 
 	return ec.ess.GenerateDEK(ctx, ec.KMSKeyID, count)
+}
+
+func (ec *EnclaveClient) DecryptDEK(ctx context.Context, objectID string, encryptedDEKB64 string) ([]byte, error) {
+	if err := ec.ensureSession(ctx); err != nil {
+		return nil, err
+	}
+	ec.essMu.RLock()
+	defer ec.essMu.RUnlock()
+
+	item := enclaveproto.SessionUnwrapItem{
+		ObjectId:   objectID,
+		Ciphertext: encryptedDEKB64,
+	}
+	items := []enclaveproto.SessionUnwrapItem{item}
+
+	res, err := ec.ess.SessionUnwrap(ctx, items, ec.KMSKeyID)
+	if err != nil {
+		return nil, err
+	}
+	if res[0].Error != "" {
+		return nil, fmt.Errorf("failed to decrypt DEK: %s", res[0].Error)
+	}
+
+	return ec.ess.UnsealDEK(ctx, res[0].SealedDEK, res[0].Nonce, objectID)
 }
