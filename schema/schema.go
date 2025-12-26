@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 	"github.com/google/uuid"
 )
 
@@ -29,16 +30,25 @@ func (m *GardbMeta) Schema() *Schema {
 
 type Model map[string]*Field
 
-func New(name string, model Model) *Schema {
+func New(name string, model Model) (*Schema, error) {
+	const op = "Schema.New"
+
 	fields := make(map[string]*Field, len(model))
 	for fieldName, field := range model {
+		if field.defaultValue != nil && !field.typeValidator(field.defaultValue) {
+			return nil, &errors.Error{
+				Op:    op,
+				Field: fieldName,
+				Err:   fmt.Errorf("%w: default value type does not match field type", errors.ErrInvalidSchema),
+			}
+		}
 		field.name = fieldName
 		fields[fieldName] = field
 	}
 	return &Schema{
 		name:   name,
 		fields: fields,
-	}
+	}, nil
 }
 
 func (s *Schema) Name() string {
@@ -46,14 +56,27 @@ func (s *Schema) Name() string {
 }
 
 func (s *Schema) New(ptr any) error {
+	const op = "Schema.New"
+
 	rv := reflect.ValueOf(ptr)
-	// Validate that ptr is a pointer to a struct
 	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Struct {
-		return fmt.Errorf("expected pointer to struct")
+		return &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: expected pointer to struct, got %T", errors.ErrInvalidSchema, ptr),
+		}
+	}
+	rv = rv.Elem()
+	if rv.FieldByName("GardbMeta").IsValid() == false {
+		return errors.Errorf(op, nil, "struct must have a GardbMeta field of type *GardbMeta")
+	}
+	if rv.FieldByName("GardbMeta").Type() != reflect.TypeOf((*GardbMeta)(nil)) {
+		return errors.Errorf(op, nil, "struct must have a GardbMeta field of type *GardbMeta")
 	}
 
 	rv = rv.Elem()
 	rt := rv.Type()
+
+	structTags := make(map[string]bool)
 
 	for i := 0; i < rt.NumField(); i++ {
 		sf := rt.Field(i)
@@ -61,23 +84,36 @@ func (s *Schema) New(ptr any) error {
 		if tag == "" {
 			continue
 		}
+		structTags[tag] = true
 
 		// Validate field against schema
 		sField, ok := s.fields[tag]
 		if !ok {
-			return fmt.Errorf("struct field %s not defined in schema", tag)
+			return &errors.Error{
+				Op:    op,
+				Field: tag,
+				Err:   fmt.Errorf("%w: field not defined in schema", errors.ErrInvalidSchema),
+			}
 		}
 
 		val := rv.Field(i)
 		if !val.IsZero() && !sField.typeValidator(val.Interface()) {
-			return fmt.Errorf("field %s has invalid type", tag)
+			return &errors.Error{
+				Op:    op,
+				Field: tag,
+				Err:   fmt.Errorf("%w: invalid type", errors.ErrInvalidSchema),
+			}
 		}
 	}
 
 	// Check if all schema fields were processed
-	for name := range s.fields {
-		if _, ok := rt.FieldByName(name); !ok {
-			return fmt.Errorf("struct does not match schema fields, missing field: %s", name)
+	for fieldName, field := range s.fields {
+		if field.required && !structTags[fieldName] {
+			return &errors.Error{
+				Op:    op,
+				Field: fieldName,
+				Err:   fmt.Errorf("%w: missing required field", errors.ErrInvalidSchema),
+			}
 		}
 	}
 
@@ -95,6 +131,9 @@ func (s *Schema) New(ptr any) error {
 }
 
 func (s *Schema) Extract(ptr any) (values map[string]any, indexes map[string]any, err error) {
+	const op = "Schema.Extract"
+	valErrors := &errors.ValidationErrors{Op: op}
+
 	values = make(map[string]any, len(s.fields))
 	indexes = make(map[string]any)
 
@@ -115,12 +154,13 @@ func (s *Schema) Extract(ptr any) (values map[string]any, indexes map[string]any
 			if field.defaultValue != nil {
 				values[tag] = field.defaultValue
 			} else if field.required {
-				return nil, nil, fmt.Errorf("missing required field: %s", tag)
+				valErrors.Add(tag, "field is required", nil)
+				continue
 			}
 		}
 
 		if !val.IsZero() && !field.typeValidator(val.Interface()) {
-			return nil, nil, fmt.Errorf("field %s has invalid type", tag)
+			valErrors.Add(tag, "invalid type", val.Interface())
 		}
 
 		values[tag] = val.Interface()
@@ -128,6 +168,10 @@ func (s *Schema) Extract(ptr any) (values map[string]any, indexes map[string]any
 		if field.searchable {
 			indexes[tag] = val.Interface()
 		}
+	}
+
+	if valErrors.HasErrors() {
+		return nil, nil, valErrors
 	}
 
 	return values, indexes, nil

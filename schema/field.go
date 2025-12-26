@@ -1,5 +1,9 @@
 package schema
 
+import (
+	"reflect"
+)
+
 type FieldType int
 
 const (
@@ -34,8 +38,8 @@ func Int() *Field {
 	return &Field{
 		typ: IntegerType,
 		typeValidator: func(val any) bool {
-			_, ok := val.(int)
-			return ok
+			rv := reflect.ValueOf(val)
+			return rv.Kind() >= reflect.Int && rv.Kind() <= reflect.Int64
 		},
 	}
 }
@@ -54,8 +58,8 @@ func Float() *Field {
 	return &Field{
 		typ: FloatType,
 		typeValidator: func(val any) bool {
-			_, ok := val.(float64)
-			return ok
+			rv := reflect.ValueOf(val)
+			return rv.Kind() == reflect.Float32 || rv.Kind() == reflect.Float64
 		},
 	}
 }
@@ -81,9 +85,6 @@ func Time() *Field {
 }
 
 func (f *Field) Default(val any) *Field {
-	if !f.typeValidator(val) {
-		panic("default value does not match field type")
-	}
 	f.defaultValue = val
 	return f
 }
