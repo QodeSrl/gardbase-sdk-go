@@ -35,7 +35,23 @@ func (c *Client) Put(ctx context.Context, obj any) error {
 	}
 
 	// Get the schema from the GardbMeta field
-	schema := reflect.ValueOf(obj).Elem().FieldByName("GardbMeta").Interface().(*schema.GardbMeta).Schema()
+	rv := reflect.ValueOf(obj).Elem()
+	metaField := rv.FieldByName("GardbMeta")
+
+	meta, ok := metaField.Interface().(schema.GardbMeta)
+	if !ok {
+		return &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: GardbMeta field has wrong type", errors.ErrValidation),
+		}
+	}
+	schema := meta.Schema()
+	if schema == nil {
+		return &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: schema not initialized", errors.ErrValidation),
+		}
+	}
 
 	// Extract values and indexes from the object using the schema
 	values, indexes, err := schema.Extract(obj)
@@ -63,17 +79,14 @@ func (c *Client) Put(ctx context.Context, obj any) error {
 	}
 
 	// Update CreatedAt and UpdatedAt fields in the original object
-	rv := reflect.ValueOf(obj).Elem()
-	now := respBody.CreatedAt
-	updatedAtField := rv.FieldByName("UpdatedAt")
-	if updatedAtField.IsValid() && updatedAtField.CanSet() && updatedAtField.Type() == reflect.TypeOf(time.Time{}) {
-		updatedAtField.Set(reflect.ValueOf(now))
-	}
-	createdAtField := rv.FieldByName("CreatedAt")
-	if createdAtField.IsValid() && createdAtField.CanSet() && createdAtField.Type() == reflect.TypeOf(time.Time{}) {
-		if createdAtField.IsZero() {
-			createdAtField.Set(reflect.ValueOf(now))
-		}
+	if metaField.IsValid() && metaField.CanSet() {
+		// Update ID
+		meta.ID = respBody.ObjectID
+		// Update timestamps
+		meta.CreatedAt = respBody.CreatedAt.Unix()
+		meta.UpdatedAt = respBody.CreatedAt.Unix()
+
+		metaField.Set(reflect.ValueOf(meta))
 	}
 
 	return nil

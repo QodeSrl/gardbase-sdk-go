@@ -5,7 +5,6 @@ import (
 	"reflect"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
-	"github.com/google/uuid"
 )
 
 type Schema struct {
@@ -15,13 +14,9 @@ type Schema struct {
 
 type GardbMeta struct {
 	schema    *Schema
-	id        string
+	ID        string
 	CreatedAt int64
 	UpdatedAt int64
-}
-
-func (m *GardbMeta) ID() string {
-	return m.id
 }
 
 func (m *GardbMeta) Schema() *Schema {
@@ -122,7 +117,6 @@ func (s *Schema) New(ptr any) error {
 	if metaField.IsValid() && metaField.CanSet() {
 		meta := GardbMeta{
 			schema: s,
-			id:     uuid.New().String(),
 		}
 		metaField.Set(reflect.ValueOf(meta))
 	}
@@ -156,18 +150,22 @@ func (s *Schema) Extract(ptr any) (values map[string]any, indexes map[string]any
 			} else if field.required {
 				valErrors.Add(tag, "field is required", nil)
 				continue
+			} else {
+				continue
+			}
+		} else {
+			if !field.typeValidator(val.Interface()) {
+				valErrors.Add(tag, "invalid type", val.Interface())
+				continue
+			}
+
+			values[tag] = val.Interface()
+
+			if field.searchable {
+				indexes[tag] = val.Interface()
 			}
 		}
 
-		if !val.IsZero() && !field.typeValidator(val.Interface()) {
-			valErrors.Add(tag, "invalid type", val.Interface())
-		}
-
-		values[tag] = val.Interface()
-
-		if field.searchable {
-			indexes[tag] = val.Interface()
-		}
 	}
 
 	if valErrors.HasErrors() {

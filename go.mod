@@ -6,7 +6,6 @@ require (
 	github.com/QodeSrl/gardbase/pkg/crypto v0.0.2
 	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.1
 	github.com/QodeSrl/gardbase/pkg/models v0.0.3
-	github.com/google/uuid v1.6.0
 )
 
 require (
