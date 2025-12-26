@@ -4,15 +4,30 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-"fmt"
+	"fmt"
 	"reflect"
 	"time"
 
-"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
+	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 	"github.com/QodeSrl/gardbase-sdk-go/internal"
 	"github.com/QodeSrl/gardbase/pkg/crypto"
 )
 
+// Get retrieves the encrypted object with the given id from the remote API, decrypts its data encryption key (DEK)
+// using the enclave client, decrypts the stored object payload, and unmarshals the resulting JSON into obj.
+// obj must be a pointer to a struct that contains a GardbMeta field.
+// On success Get will also populate or update common metadata fields on the target struct:
+//   - UpdatedAt is set to the server's CreatedAt timestamp (overwritten if present).
+//   - CreatedAt is set to the server's CreatedAt timestamp only if it is currently zero.
+//   - ID is set to the provided id only if the struct's ID field is an empty string.
+//
+// Parameters:
+//   - ctx: context for API and enclave operations.
+//   - id: identifier of the object to fetch.
+//   - obj: destination object (pointer to struct) to unmarshal the decrypted JSON into.
+//
+// Returns an error if the provided obj is invalid (ErrInvalidObjectType), if the API call fails, or if DEK/object decryption
+// or JSON unmarshalling fails (returns ErrDecryptionFailed for decryption/unmarshal failures).
 func (c *Client) Get(ctx context.Context, id string, obj any) error {
 	const op = "Client.Get"
 
