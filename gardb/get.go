@@ -40,20 +40,20 @@ func (c *Client) Get(ctx context.Context, id string, obj any) error {
 	}
 
 	// Call the API client's Get method to retrieve the encrypted object payload
-	data, class, err := c.apiClient.Get(ctx, id)
+	data, err := c.apiClient.Get(ctx, id)
 	if err != nil {
 		return &errors.Error{
 			Op:  op,
-			Err: fmt.Errorf("%w: failed to get object from API: %v", class, err),
+			Err: err,
 		}
 	}
 
 	// Decrypt DEK
-	ptDEK, class, err := c.enclaveClient.DecryptDEK(ctx, id, base64.StdEncoding.EncodeToString(data.DEK))
+	ptDEK, err := c.enclaveClient.DecryptDEK(ctx, id, base64.StdEncoding.EncodeToString(data.DEK))
 	if err != nil {
 		return &errors.Error{
 			Op:  op,
-			Err: fmt.Errorf("%w: failed to decrypt DEK: %v", class, err),
+			Err: err,
 		}
 	}
 

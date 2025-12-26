@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"time"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 	"github.com/QodeSrl/gardbase-sdk-go/internal"
@@ -70,11 +69,11 @@ func (c *Client) Put(ctx context.Context, obj any) error {
 	}
 
 	// Call the API client's Put method to handle encryption and upload
-	respBody, class, err := c.apiClient.Put(ctx, values, indexes, dek[0], schema)
+	respBody, err := c.apiClient.Put(ctx, values, indexes, dek[0], schema)
 	if err != nil {
 		return &errors.Error{
 			Op:  op,
-			Err: fmt.Errorf("%w: failed to put object via API: %v", class, err),
+			Err: err,
 		}
 	}
 

@@ -112,9 +112,9 @@ func (ec *EnclaveClient) GenerateDEK(ctx context.Context, count int) ([]crypto.G
 	return ec.ess.GenerateDEK(ctx, ec.KMSKeyID, count)
 }
 
-func (ec *EnclaveClient) DecryptDEK(ctx context.Context, objectID string, encryptedDEKB64 string) (dek []byte, class error, err error) {
+func (ec *EnclaveClient) DecryptDEK(ctx context.Context, objectID string, encryptedDEKB64 string) ([]byte, error) {
 	if err := ec.ensureSession(ctx); err != nil {
-		return nil, errors.ErrSession, err
+		return nil, fmt.Errorf("%w: %w", errors.ErrSession, err)
 	}
 	ec.essMu.RLock()
 	defer ec.essMu.RUnlock()
@@ -127,15 +127,15 @@ func (ec *EnclaveClient) DecryptDEK(ctx context.Context, objectID string, encryp
 
 	res, err := ec.ess.SessionUnwrap(ctx, items, ec.KMSKeyID)
 	if err != nil {
-		return nil, errors.ErrEncryption, fmt.Errorf("failed to unwrap DEK: %w", err)
+		return nil, fmt.Errorf("%w: %w", errors.ErrEncryption, err)
 	}
 	if res[0].Error != "" {
-		return nil, errors.ErrEncryption, fmt.Errorf("failed to decrypt DEK: %s", res[0].Error)
+		return nil, fmt.Errorf("%w: %s", errors.ErrEncryption, res[0].Error)
 	}
 
-	dek, err = ec.ess.UnsealDEK(ctx, res[0].SealedDEK, res[0].Nonce, objectID)
+	dek, err := ec.ess.UnsealDEK(ctx, res[0].SealedDEK, res[0].Nonce, objectID)
 	if err != nil {
-		return nil, errors.ErrEncryption, fmt.Errorf("failed to unseal DEK: %w", err)
+		return nil, fmt.Errorf("%w: failed to unseal DEK: %v", errors.ErrEncryption, err)
 	}
-	return dek, nil, nil
+	return dek, nil
 }
