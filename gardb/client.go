@@ -2,13 +2,15 @@ package gardb
 
 import (
 	"crypto/x509"
-	"fmt"
+	"sync"
 	"time"
 
+	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 	"github.com/QodeSrl/gardbase-sdk-go/internal"
 )
 
 type Client struct {
+	mu            sync.RWMutex
 	apiClient     *internal.APIClient
 	enclaveClient *internal.EnclaveClient
 	config        *Config
@@ -20,10 +22,10 @@ type Config struct {
 	KMSKeyID    string
 
 	// Attestation verification
-	ExpectedPCRs      map[uint]string
-	VerifyAttestation bool // default: true
-	RootCA            *x509.Certificate
-	VerifyPCRs        bool // UNSAFE: only for local dev
+	ExpectedPCRs        map[uint]string
+	VerifyAttestation   bool // default: true
+	RootCA              *x509.Certificate
+	SkipPCRVerification bool // UNSAFE: only for local dev
 
 	// Optional
 	HTTPTimeout       time.Duration // default: 30 s
@@ -55,61 +57,60 @@ func (l *defaultLogger) Info(msg string, args ...any)  {}
 func (l *defaultLogger) Warn(msg string, args ...any)  {}
 func (l *defaultLogger) Error(msg string, args ...any) {}
 
-func NewClient(config *Config) (*Client, *Error) {
+func NewClient(config *Config) (*Client, error) {
+	const op = "NewClient"
+
 	if config == nil {
-		return nil, &Error{Op: "NewClient", Err: ErrInvalidConfig}
+		return nil, errors.ConfigError(op, "config is required")
 	}
 	if config.APIEndpoint == "" {
-		return nil, &Error{Op: "NewClient", Err: fmt.Errorf("APIEndpoint is required")}
+		return nil, errors.ConfigError(op, "APIEndpoint is required")
 	}
 	if config.KMSKeyID == "" {
-		return nil, &Error{Op: "NewClient", Err: fmt.Errorf("KMSKeyID is required")}
+		return nil, errors.ConfigError(op, "KMSKeyID is required")
 	}
 
-	if config.HTTPTimeout == 0 {
-		config.HTTPTimeout = 30 * time.Second
-	}
-	if config.MaxAttestationAge == 0 {
-		config.MaxAttestationAge = 5 * time.Minute
-	}
-	if config.MaxRetries == 0 {
-		config.MaxRetries = 3
-	}
-	if config.RetryDelay == 0 {
-		config.RetryDelay = 1 * time.Second
-	}
-	if config.RetryBackoff == 0 {
-		config.RetryBackoff = 2.0
-	}
-	if config.SessionRenewalThreshold == 0 {
-		config.SessionRenewalThreshold = 5 * time.Minute
-	}
-	if config.Logger == nil {
-		config.Logger = &defaultLogger{}
-	}
+	cfgCpy := *config
 
-	if config.VerifyAttestation {
-		if len(config.ExpectedPCRs) == 0 {
-			return nil, &Error{Op: "NewClient", Err: fmt.Errorf("ExpectedPCRs must be set when VerifyAttestation is true")}
-		}
+	if cfgCpy.HTTPTimeout == 0 {
+		cfgCpy.HTTPTimeout = 30 * time.Second
+	}
+	if cfgCpy.MaxAttestationAge == 0 {
+		cfgCpy.MaxAttestationAge = 5 * time.Minute
+	}
+	if cfgCpy.MaxRetries == 0 {
+		cfgCpy.MaxRetries = 3
+	}
+	if cfgCpy.RetryDelay == 0 {
+		cfgCpy.RetryDelay = 1 * time.Second
+	}
+	if cfgCpy.RetryBackoff == 0 {
+		cfgCpy.RetryBackoff = 2.0
+	}
+	if cfgCpy.SessionRenewalThreshold == 0 {
+		cfgCpy.SessionRenewalThreshold = 5 * time.Minute
+	}
+	if cfgCpy.Logger == nil {
+		cfgCpy.Logger = &defaultLogger{}
 	}
 
 	enclaveClient := &internal.EnclaveClient{
-		APIEndpoint:             config.APIEndpoint,
-		KMSKeyID:                config.KMSKeyID,
-		ExpectedPCRs:            config.ExpectedPCRs,
-		VerifyAttestation:       config.VerifyAttestation,
-		RootCA:                  config.RootCA,
-		VerifyPCRs:              config.VerifyPCRs,
-		MaxAttestationAge:       config.MaxAttestationAge,
-		HTTPTimeout:             config.HTTPTimeout,
-		SessionRenewalThreshold: config.SessionRenewalThreshold,
+		APIEndpoint:             cfgCpy.APIEndpoint,
+		KMSKeyID:                cfgCpy.KMSKeyID,
+		ExpectedPCRs:            cfgCpy.ExpectedPCRs,
+		VerifyAttestation:       cfgCpy.VerifyAttestation,
+		RootCA:                  cfgCpy.RootCA,
+		SkipPCRVerification:     cfgCpy.SkipPCRVerification,
+		MaxAttestationAge:       cfgCpy.MaxAttestationAge,
+		HTTPTimeout:             cfgCpy.HTTPTimeout,
+		SessionRenewalThreshold: cfgCpy.SessionRenewalThreshold,
 	}
 
-	apiClient := internal.NewAPIClient(config.APIEndpoint, config.HTTPTimeout)
+	apiClient := internal.NewAPIClient(cfgCpy.APIEndpoint, cfgCpy.HTTPTimeout)
 
 	client := &Client{
-		config:        config,
+		mu:            sync.RWMutex{},
+		config:        &cfgCpy,
 		enclaveClient: enclaveClient,
 		apiClient:     apiClient,
 	}
