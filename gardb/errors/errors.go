@@ -86,13 +86,14 @@ func ConfigError(op string, message string) *Error {
 }
 
 var (
-	ErrInvalidConfig = errors.New("invalid configuration")
-	ErrInvalidSchema = errors.New("invalid schema")
-	ErrValidation    = errors.New("validation error")
-	ErrSession       = errors.New("session error")
-	ErrEncryption    = errors.New("encryption error")
-	ErrNetwork       = errors.New("network error")
-	ErrNotFound      = errors.New("not found")
-	ErrUnauthorized  = errors.New("unauthorized")
-	ErrRateLimited   = errors.New("rate limited")
+	ErrInvalidConfig       = errors.New("invalid configuration")
+	ErrInvalidSchema       = errors.New("invalid schema")
+	ErrValidation          = errors.New("validation error")
+	ErrSession             = errors.New("session error")
+	ErrEncryption          = errors.New("encryption error")
+	ErrNetwork             = errors.New("network error")
+	ErrNotFound            = errors.New("not found")
+	ErrUnauthorized        = errors.New("unauthorized")
+	ErrRateLimited         = errors.New("rate limited")
+	ErrCancelledOrTimedOut = errors.New("operation cancelled or timed out")
 )

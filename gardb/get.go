@@ -42,6 +42,12 @@ func (c *Client) Get(ctx context.Context, id string, obj any) error {
 	// Call the API client's Get method to retrieve the encrypted object payload
 	data, err := c.apiClient.Get(ctx, id)
 	if err != nil {
+		if internal.IsContextError(err) {
+			return &errors.Error{
+				Op:  op,
+				Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
+			}
+		}
 		return &errors.Error{
 			Op:  op,
 			Err: err,
@@ -51,6 +57,12 @@ func (c *Client) Get(ctx context.Context, id string, obj any) error {
 	// Decrypt DEK
 	ptDEK, err := c.enclaveClient.DecryptDEK(ctx, id, base64.StdEncoding.EncodeToString(data.DEK))
 	if err != nil {
+		if internal.IsContextError(err) {
+			return &errors.Error{
+				Op:  op,
+				Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
+			}
+		}
 		return &errors.Error{
 			Op:  op,
 			Err: err,
@@ -60,6 +72,12 @@ func (c *Client) Get(ctx context.Context, id string, obj any) error {
 	// Decrypt object
 	decryptedObjBytes, err := crypto.DecryptObjectProbabilistic(data.EncryptedObj, ptDEK)
 	if err != nil {
+		if internal.IsContextError(err) {
+			return &errors.Error{
+				Op:  op,
+				Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
+			}
+		}
 		return &errors.Error{
 			Op:  op,
 			Err: fmt.Errorf("%w: failed to decrypt object: %v", errors.ErrEncryption, err),

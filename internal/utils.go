@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"context"
+	"errors"
 	"reflect"
 
 	"github.com/QodeSrl/gardbase-sdk-go/schema"
@@ -19,4 +21,8 @@ func ValidatePtrToStructWithGardbMeta(obj any) bool {
 		return false
 	}
 	return true
+}
+
+func IsContextError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }

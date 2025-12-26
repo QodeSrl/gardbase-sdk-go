@@ -25,6 +25,13 @@ import (
 func (c *Client) Put(ctx context.Context, obj any) error {
 	const op = "Client.Put"
 
+	if err := ctx.Err(); err != nil {
+		return &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("context error: %w", err),
+		}
+	}
+
 	// Validate that ptrToStruct is a pointer to a struct that has a GardbMeta field
 	if !internal.ValidatePtrToStructWithGardbMeta(obj) {
 		return &errors.Error{
@@ -60,8 +67,14 @@ func (c *Client) Put(ctx context.Context, obj any) error {
 	}
 
 	// Generate a DEK using the enclave client
-	dek, err := c.enclaveClient.GenerateDEK(ctx, 1)
+	deks, err := c.enclaveClient.GenerateDEK(ctx, 1)
 	if err != nil {
+		if internal.IsContextError(err) {
+			return &errors.Error{
+				Op:  op,
+				Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
+			}
+		}
 		return &errors.Error{
 			Op:  op,
 			Err: fmt.Errorf("%w: failed to generate DEK: %v", errors.ErrSession, err),
@@ -69,8 +82,14 @@ func (c *Client) Put(ctx context.Context, obj any) error {
 	}
 
 	// Call the API client's Put method to handle encryption and upload
-	respBody, err := c.apiClient.Put(ctx, values, indexes, dek[0], schema)
+	respBody, err := c.apiClient.Put(ctx, values, indexes, deks[0], schema)
 	if err != nil {
+		if internal.IsContextError(err) {
+			return &errors.Error{
+				Op:  op,
+				Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
+			}
+		}
 		return &errors.Error{
 			Op:  op,
 			Err: err,
