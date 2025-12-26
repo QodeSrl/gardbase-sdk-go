@@ -4,40 +4,59 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+"fmt"
 	"reflect"
 	"time"
 
+"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 	"github.com/QodeSrl/gardbase-sdk-go/internal"
 	"github.com/QodeSrl/gardbase/pkg/crypto"
 )
 
 func (c *Client) Get(ctx context.Context, id string, obj any) error {
+	const op = "Client.Get"
+
 	// Validate that ptrToStruct is a pointer to a struct that has a GardbMeta field
 	if !internal.ValidatePtrToStructWithGardbMeta(obj) {
-		return ErrInvalidObjectType
+		return &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: expected pointer to struct with GardbMeta field", errors.ErrValidation),
+		}
 	}
 
 	// Call the API client's Get method to retrieve the encrypted object payload
-	data, err := c.apiClient.Get(ctx, id)
+	data, class, err := c.apiClient.Get(ctx, id)
 	if err != nil {
-		return err
+		return &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: failed to get object from API: %v", class, err),
+		}
 	}
 
 	// Decrypt DEK
-	ptDEK, err := c.enclaveClient.DecryptDEK(ctx, id, base64.StdEncoding.EncodeToString(data.DEK))
+	ptDEK, class, err := c.enclaveClient.DecryptDEK(ctx, id, base64.StdEncoding.EncodeToString(data.DEK))
 	if err != nil {
-		return ErrDecryptionFailed
+		return &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: failed to decrypt DEK: %v", class, err),
+		}
 	}
 
 	// Decrypt object
 	decryptedObjBytes, err := crypto.DecryptObjectProbabilistic(data.EncryptedObj, ptDEK)
 	if err != nil {
-		return ErrDecryptionFailed
+		return &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: failed to decrypt object: %v", errors.ErrEncryption, err),
+		}
 	}
 
 	err = json.Unmarshal(decryptedObjBytes, obj)
 	if err != nil {
-		return ErrDecryptionFailed
+		return &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: failed to unmarshal decrypted object JSON: %v", errors.ErrEncryption, err),
+		}
 	}
 
 	// Add metadata to the object

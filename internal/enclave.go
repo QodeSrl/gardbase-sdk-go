@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 	"github.com/QodeSrl/gardbase/pkg/crypto"
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 )
@@ -19,11 +20,11 @@ type EnclaveClient struct {
 	KMSKeyID    string
 
 	// Attestation Verification
-	ExpectedPCRs      map[uint]string
-	VerifyAttestation bool
-	RootCA            *x509.Certificate
-	VerifyPCRs        bool
-	MaxAttestationAge time.Duration
+	ExpectedPCRs        map[uint]string
+	VerifyAttestation   bool
+	RootCA              *x509.Certificate
+	SkipPCRVerification bool
+	MaxAttestationAge   time.Duration
 
 	HTTPTimeout             time.Duration
 	SessionRenewalThreshold time.Duration
@@ -62,12 +63,12 @@ func (ec *EnclaveClient) InitEnclaveSecureSession(ctx context.Context) error {
 		ExpectedPCRs:      ec.ExpectedPCRs,
 		RootCA:            ec.RootCA,
 		MaxAttestationAge: ec.MaxAttestationAge,
-		VerifyPCRs:        ec.VerifyPCRs,
+		VerifyPCRs:        !ec.SkipPCRVerification,
 		HTTPTimeout:       ec.HTTPTimeout,
 	}
 	ess, err := crypto.InitEnclaveSecureSession(ctx, config)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to initialize enclave secure session: %w", err)
 	}
 	ec.ess = ess
 	return nil
@@ -111,9 +112,9 @@ func (ec *EnclaveClient) GenerateDEK(ctx context.Context, count int) ([]crypto.G
 	return ec.ess.GenerateDEK(ctx, ec.KMSKeyID, count)
 }
 
-func (ec *EnclaveClient) DecryptDEK(ctx context.Context, objectID string, encryptedDEKB64 string) ([]byte, error) {
+func (ec *EnclaveClient) DecryptDEK(ctx context.Context, objectID string, encryptedDEKB64 string) (dek []byte, class error, err error) {
 	if err := ec.ensureSession(ctx); err != nil {
-		return nil, err
+		return nil, errors.ErrSession, err
 	}
 	ec.essMu.RLock()
 	defer ec.essMu.RUnlock()
@@ -126,11 +127,15 @@ func (ec *EnclaveClient) DecryptDEK(ctx context.Context, objectID string, encryp
 
 	res, err := ec.ess.SessionUnwrap(ctx, items, ec.KMSKeyID)
 	if err != nil {
-		return nil, err
+		return nil, errors.ErrEncryption, fmt.Errorf("failed to unwrap DEK: %w", err)
 	}
 	if res[0].Error != "" {
-		return nil, fmt.Errorf("failed to decrypt DEK: %s", res[0].Error)
+		return nil, errors.ErrEncryption, fmt.Errorf("failed to decrypt DEK: %s", res[0].Error)
 	}
 
-	return ec.ess.UnsealDEK(ctx, res[0].SealedDEK, res[0].Nonce, objectID)
+	dek, err = ec.ess.UnsealDEK(ctx, res[0].SealedDEK, res[0].Nonce, objectID)
+	if err != nil {
+		return nil, errors.ErrEncryption, fmt.Errorf("failed to unseal DEK: %w", err)
+	}
+	return dek, nil, nil
 }
