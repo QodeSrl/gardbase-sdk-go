@@ -30,6 +30,17 @@ type EnclaveClient struct {
 	SessionRenewalThreshold time.Duration
 }
 
+func (ec *EnclaveClient) Close() error {
+	ec.essMu.Lock()
+	defer ec.essMu.Unlock()
+
+	if ec.ess != nil {
+		ec.ess.Close()
+	}
+
+	return nil
+}
+
 func (ec *EnclaveClient) shouldRenewSession(expiresAt time.Time) bool {
 	renewalTime := time.Now().Add(ec.SessionRenewalThreshold)
 	return expiresAt.Before(renewalTime)

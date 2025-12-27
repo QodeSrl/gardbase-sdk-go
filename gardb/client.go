@@ -119,5 +119,5 @@ func NewClient(config *Config) (*Client, error) {
 }
 
 func (c *Client) Close() error {
-	return nil
+	return c.enclaveClient.Close()
 }
