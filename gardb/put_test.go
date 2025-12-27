@@ -32,7 +32,7 @@ func TestPut_WrongGardbMetaType(t *testing.T) {
 	}
 	obj := &S{GardbMeta: 1}
 	err := c.Put(context.Background(), obj)
-	if err == nil || !strings.Contains(err.Error(), "GardbMeta field has wrong type") {
+	if err == nil || !strings.Contains(err.Error(), "expected pointer to struct with GardbMeta field") {
 		t.Fatalf("expected GardbMeta type error, got: %v", err)
 	}
 }
