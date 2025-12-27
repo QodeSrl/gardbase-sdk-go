@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"time"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 	"github.com/QodeSrl/gardbase-sdk-go/internal"
+	"github.com/QodeSrl/gardbase-sdk-go/schema"
 	"github.com/QodeSrl/gardbase/pkg/crypto"
 )
 
@@ -84,33 +84,36 @@ func (c *Client) Get(ctx context.Context, id string, obj any) error {
 		}
 	}
 
-	err = json.Unmarshal(decryptedObjBytes, obj)
-	if err != nil {
+	if err = json.Unmarshal(decryptedObjBytes, obj); err != nil {
 		return &errors.Error{
 			Op:  op,
-			Err: fmt.Errorf("%w: failed to unmarshal decrypted object JSON: %v", errors.ErrEncryption, err),
+			Err: fmt.Errorf("%w: failed to unmarshal object: %v", errors.ErrEncryption, err),
 		}
 	}
 
-	// Add metadata to the object
-	now := data.CreatedAt
+	// Update GardbMeta fields
 	rv := reflect.ValueOf(obj).Elem()
-	updatedAtField := rv.FieldByName("UpdatedAt")
-	if updatedAtField.IsValid() && updatedAtField.CanSet() && updatedAtField.Type() == reflect.TypeOf(time.Time{}) {
-		updatedAtField.Set(reflect.ValueOf(now))
-	}
-	createdAtField := rv.FieldByName("CreatedAt")
-	if createdAtField.IsValid() && createdAtField.CanSet() && createdAtField.Type() == reflect.TypeOf(time.Time{}) {
-		if createdAtField.IsZero() {
-			createdAtField.Set(reflect.ValueOf(now))
+	metaField := rv.FieldByName("GardbMeta")
+	if !metaField.IsValid() {
+		return &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: GardbMeta field not found", errors.ErrValidation),
 		}
 	}
-	idField := rv.FieldByName("ID")
-	if idField.IsValid() && idField.CanSet() && idField.Type() == reflect.TypeOf("") {
-		if idField.String() == "" {
-			idField.SetString(id)
+
+	meta, ok := metaField.Interface().(schema.GardbMeta)
+	if !ok {
+		return &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: invalid GardbMeta type", errors.ErrValidation),
 		}
 	}
+	meta.SchemaName = data.SchemaName
+	meta.ID = id
+	meta.CreatedAt = data.CreatedAt
+	meta.UpdatedAt = data.UpdatedAt
+
+	metaField.Set(reflect.ValueOf(meta))
 
 	return nil
 }

@@ -3,9 +3,63 @@ package schema
 import (
 	"fmt"
 	"reflect"
+	"sync"
+	"time"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 )
+
+var (
+	globalRegistry = &registry{
+		schemas: make(map[string]*Schema),
+	}
+)
+
+type registry struct {
+	mu      sync.RWMutex
+	schemas map[string]*Schema
+}
+
+func (r *registry) register(schema *Schema) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, exists := r.schemas[schema.name]; exists {
+		return fmt.Errorf("schema %s already registered", schema.name)
+	}
+
+	r.schemas[schema.name] = schema
+	return nil
+}
+
+func (r *registry) get(name string) (*Schema, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	schema, ok := r.schemas[name]
+	return schema, ok
+}
+
+func (r *registry) list() []*Schema {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	schemas := make([]*Schema, 0, len(r.schemas))
+	for _, schema := range r.schemas {
+		schemas = append(schemas, schema)
+	}
+	return schemas
+}
+
+func RegisterSchema(schema *Schema) error {
+	return globalRegistry.register(schema)
+}
+
+func GetSchema(name string) (*Schema, bool) {
+	return globalRegistry.get(name)
+}
+
+func ListSchemas() []*Schema {
+	return globalRegistry.list()
+}
 
 type Schema struct {
 	name   string
@@ -13,14 +67,14 @@ type Schema struct {
 }
 
 type GardbMeta struct {
-	schema    *Schema
-	ID        string
-	CreatedAt int64
-	UpdatedAt int64
+	SchemaName string
+	ID         string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
-func (m *GardbMeta) Schema() *Schema {
-	return m.schema
+func (m *GardbMeta) Schema() (*Schema, bool) {
+	return GetSchema(m.SchemaName)
 }
 
 type Model map[string]*Field
@@ -28,8 +82,29 @@ type Model map[string]*Field
 func New(name string, model Model) (*Schema, error) {
 	const op = "Schema.New"
 
+	if name == "" {
+		return nil, &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: schema name cannot be empty", errors.ErrInvalidSchema),
+		}
+	}
+
+	if len(model) == 0 {
+		return nil, &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: schema model cannot be empty", errors.ErrInvalidSchema),
+		}
+	}
+
 	fields := make(map[string]*Field, len(model))
 	for fieldName, field := range model {
+		if fieldName == "" {
+			return nil, &errors.Error{
+				Op:  op,
+				Err: fmt.Errorf("%w: field name cannot be empty", errors.ErrInvalidSchema),
+			}
+		}
+
 		if field.defaultValue != nil && !field.typeValidator(field.defaultValue) {
 			return nil, &errors.Error{
 				Op:    op,
@@ -37,13 +112,28 @@ func New(name string, model Model) (*Schema, error) {
 				Err:   fmt.Errorf("%w: default value type does not match field type", errors.ErrInvalidSchema),
 			}
 		}
+
 		field.name = fieldName
 		fields[fieldName] = field
 	}
-	return &Schema{
+
+	s := &Schema{
 		name:   name,
 		fields: fields,
-	}, nil
+	}
+
+	if err := RegisterSchema(s); err != nil {
+		existing, ok := GetSchema(name)
+		if ok {
+			return existing, nil
+		}
+		return nil, &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: failed to register schema: %v", errors.ErrInvalidSchema, err),
+		}
+	}
+
+	return s, nil
 }
 
 func (s *Schema) Name() string {
@@ -116,7 +206,7 @@ func (s *Schema) New(ptr any) error {
 	metaField := reflect.ValueOf(ptr).Elem().FieldByName("GardbMeta")
 	if metaField.IsValid() && metaField.CanSet() {
 		meta := GardbMeta{
-			schema: s,
+			SchemaName: s.name,
 		}
 		metaField.Set(reflect.ValueOf(meta))
 	}

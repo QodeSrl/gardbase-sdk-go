@@ -51,8 +51,8 @@ func (c *Client) Put(ctx context.Context, obj any) error {
 			Err: fmt.Errorf("%w: GardbMeta field has wrong type", errors.ErrValidation),
 		}
 	}
-	schema := meta.Schema()
-	if schema == nil {
+	schema, ok := meta.Schema()
+	if !ok {
 		return &errors.Error{
 			Op:  op,
 			Err: fmt.Errorf("%w: schema not initialized", errors.ErrValidation),
@@ -101,8 +101,8 @@ func (c *Client) Put(ctx context.Context, obj any) error {
 		// Update ID
 		meta.ID = respBody.ObjectID
 		// Update timestamps
-		meta.CreatedAt = respBody.CreatedAt.Unix()
-		meta.UpdatedAt = respBody.CreatedAt.Unix()
+		meta.CreatedAt = respBody.CreatedAt
+		meta.UpdatedAt = respBody.CreatedAt
 
 		metaField.Set(reflect.ValueOf(meta))
 	}
