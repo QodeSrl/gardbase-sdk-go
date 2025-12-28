@@ -58,17 +58,14 @@ func (ec *EnclaveClient) ensureSession(ctx context.Context) error {
 		ec.ess = nil
 	}
 
-	err := ec.InitEnclaveSecureSession(ctx)
+	err := ec.initEnclaveSecureSessionLocked(ctx)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (ec *EnclaveClient) InitEnclaveSecureSession(ctx context.Context) error {
-	ec.essMu.Lock()
-	defer ec.essMu.Unlock()
-
+func (ec *EnclaveClient) initEnclaveSecureSessionLocked(ctx context.Context) error {
 	config := crypto.SessionConfig{
 		Endpoint:          ec.APIEndpoint + "/enclave",
 		ExpectedPCRs:      ec.ExpectedPCRs,

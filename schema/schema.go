@@ -98,15 +98,15 @@ func (s *Schema) New(ptr any) error {
 		}
 	}
 	rv = rv.Elem()
-	if rv.FieldByName("GardbMeta").IsValid() == false {
-		return errors.Errorf(op, nil, "struct must have a GardbMeta field of type *GardbMeta")
-	}
-	if rv.FieldByName("GardbMeta").Type() != reflect.TypeOf((*GardbMeta)(nil)) {
-		return errors.Errorf(op, nil, "struct must have a GardbMeta field of type *GardbMeta")
-	}
-
-	rv = rv.Elem()
 	rt := rv.Type()
+
+	field := rv.FieldByName("GardbMeta")
+	if !field.IsValid() {
+		return errors.Errorf(op, nil, "struct must have a GardbMeta field of type GardbMeta")
+	}
+	if field.Type() != reflect.TypeOf(GardbMeta{}) {
+		return errors.Errorf(op, nil, "struct must have a GardbMeta field of type GardbMeta")
+	}
 
 	structTags := make(map[string]bool)
 

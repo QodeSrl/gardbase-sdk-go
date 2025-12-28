@@ -2,6 +2,7 @@ package gardb_test
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"testing"
 
@@ -37,13 +38,38 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 
 	var bookId string
 
+	t.Run("connect", func(t *testing.T) {
+		t.Log("Checking API connectivity...")
+		resp, err := http.Get(getEnv("TEST_GARDB_API_ENDPOINT", "https://api.gardbase.com") + "/health")
+		if err != nil {
+			t.Fatalf("API not reachable: %v", err)
+		}
+		defer resp.Body.Close()
+	})
+
 	t.Run("create object", func(t *testing.T) {
+		t.Log("Creating book object...")
+		bookSchema, err := schema.New("book", schema.Model{
+			"name":   schema.String().Required(),
+			"author": schema.String().Required(),
+			"pages":  schema.Int().Required(),
+		})
+		if err != nil {
+			t.Fatalf("Failed to create schema: %v", err)
+		}
+
 		book := Book{
 			Name:   "The Go Programming Language",
 			Author: "Alan A. A. Donovan",
 			Pages:  380,
 		}
 
+		t.Log("Initializing book object...")
+		if err := bookSchema.New(&book); err != nil {
+			t.Fatalf("Failed to initialize book object: %v", err)
+		}
+
+		t.Log("Putting book object to Gardb...")
 		if err := client.Put(ctx, &book); err != nil {
 			t.Fatalf("Failed to put book: %v", err)
 		}
@@ -54,6 +80,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 	t.Run("retrieve object", func(t *testing.T) {
 		var retrievedBook Book
 
+		t.Log("Getting book object from Gardb...")
 		if err := client.Get(ctx, bookId, &retrievedBook); err != nil {
 			t.Fatalf("Failed to get book: %v", err)
 		}
@@ -63,5 +90,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 			retrievedBook.Pages != 380 {
 			t.Fatalf("Retrieved book does not match expected values")
 		}
+
+		t.Logf("Successfully retrieved book: %+v", retrievedBook)
 	})
 }

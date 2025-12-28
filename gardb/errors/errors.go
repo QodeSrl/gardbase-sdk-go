@@ -66,7 +66,7 @@ func (ve *ValidationErrors) HasErrors() bool {
 func Errorf(op string, err error, format string, args ...any) *Error {
 	return &Error{
 		Op:  op,
-		Err: fmt.Errorf(format+": %w", append(args, err)...),
+		Err: fmt.Errorf(format+": %v", append(args, err)...),
 	}
 }
 

@@ -80,6 +80,12 @@ func (c *Client) Put(ctx context.Context, obj any) error {
 			Err: fmt.Errorf("%w: failed to generate DEK: %v", errors.ErrSession, err),
 		}
 	}
+	if len(deks) == 0 {
+		return &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: no DEKs returned from enclave", errors.ErrSession),
+		}
+	}
 
 	// Call the API client's Put method to handle encryption and upload
 	respBody, err := c.apiClient.Put(ctx, values, indexes, deks[0], schema)

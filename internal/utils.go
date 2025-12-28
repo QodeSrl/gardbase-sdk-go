@@ -14,10 +14,11 @@ func ValidatePtrToStructWithGardbMeta(obj any) bool {
 		return false
 	}
 	rv = rv.Elem()
-	if rv.FieldByName("GardbMeta").IsValid() == false {
+	field := rv.FieldByName("GardbMeta")
+	if !field.IsValid() {
 		return false
 	}
-	if rv.FieldByName("GardbMeta").Type() != reflect.TypeOf((*schema.GardbMeta)(nil)) {
+	if field.Type() != reflect.TypeOf(schema.GardbMeta{}) {
 		return false
 	}
 	return true
