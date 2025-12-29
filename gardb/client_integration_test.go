@@ -21,6 +21,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 	client, err := gardb.NewClient(&gardb.Config{
 		APIEndpoint:         getEnv("TEST_GARDB_API_ENDPOINT", "https://api.gardbase.com"),
 		KMSKeyID:            getEnv("TEST_GARDB_KMS_KEY_ID", ""),
+		TenantID:            "test123tenant",
 		VerifyAttestation:   false,
 		SkipPCRVerification: true,
 	})

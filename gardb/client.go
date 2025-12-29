@@ -20,6 +20,7 @@ type Config struct {
 	// Required
 	APIEndpoint string
 	KMSKeyID    string
+	TenantID    string
 
 	// Attestation verification
 	ExpectedPCRs        map[uint]string
@@ -69,6 +70,9 @@ func NewClient(config *Config) (*Client, error) {
 	if config.KMSKeyID == "" {
 		return nil, errors.ConfigError(op, "KMSKeyID is required")
 	}
+	if config.TenantID == "" {
+		return nil, errors.ConfigError(op, "TenantID is required")
+	}
 
 	cfgCpy := *config
 
@@ -106,7 +110,7 @@ func NewClient(config *Config) (*Client, error) {
 		SessionRenewalThreshold: cfgCpy.SessionRenewalThreshold,
 	}
 
-	apiClient := internal.NewAPIClient(cfgCpy.APIEndpoint, cfgCpy.HTTPTimeout)
+	apiClient := internal.NewAPIClient(cfgCpy.APIEndpoint, cfgCpy.HTTPTimeout, cfgCpy.TenantID)
 
 	client := &Client{
 		mu:            sync.RWMutex{},

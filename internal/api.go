@@ -21,10 +21,28 @@ type APIClient struct {
 	httpClient *http.Client
 }
 
-func NewAPIClient(apiEndpoint string, httpTimeout time.Duration) *APIClient {
+type TenantRoundTripper struct {
+	Base     http.RoundTripper
+	TenantID string
+}
+
+func (t TenantRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("X-Tenant-ID", t.TenantID)
+	return t.base().RoundTrip(req)
+}
+
+func (t TenantRoundTripper) base() http.RoundTripper {
+	if t.Base != nil {
+		return t.Base
+	}
+	return http.DefaultTransport
+}
+
+func NewAPIClient(apiEndpoint string, httpTimeout time.Duration, tenantID string) *APIClient {
 	return &APIClient{
-		APIEndpoint: apiEndpoint,
-		httpClient:  &http.Client{Timeout: httpTimeout},
+		APIEndpoint: apiEndpoint + "/api",
+		httpClient:  &http.Client{Timeout: httpTimeout, Transport: TenantRoundTripper{TenantID: tenantID}},
 	}
 }
 
@@ -79,6 +97,15 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return models.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrNetwork, err)
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return models.CreateObjectResponse{}, fmt.Errorf("%w: unauthorized access when creating object", errors.ErrUnauthorized)
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return models.CreateObjectResponse{}, fmt.Errorf("%w: rate limit exceeded when creating object", errors.ErrRateLimited)
+		}
+		return models.CreateObjectResponse{}, fmt.Errorf("%w: failed to create object, status code: %d", errors.ErrNetwork, resp.StatusCode)
 	}
 	defer resp.Body.Close()
 
