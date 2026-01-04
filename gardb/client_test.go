@@ -39,6 +39,7 @@ func TestNewClient_DefaultsApplied(t *testing.T) {
 	cfg := &Config{
 		APIEndpoint: "https://api.example",
 		KMSKeyID:    "kms-key",
+		TenantID:    "tenant-123",
 	}
 	c, err := NewClient(cfg)
 	if err != nil {

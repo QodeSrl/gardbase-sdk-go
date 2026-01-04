@@ -55,7 +55,7 @@ func (c *Client) Get(ctx context.Context, id string, obj any) error {
 	}
 
 	// Decrypt DEK
-	ptDEK, err := c.enclaveClient.DecryptDEK(ctx, id, base64.StdEncoding.EncodeToString(data.DEK))
+	ptDEK, err := c.enclaveClient.DecryptDEK(ctx, id, base64.StdEncoding.EncodeToString(data.EncryptedDEK))
 	if err != nil {
 		if internal.IsContextError(err) {
 			return &errors.Error{
@@ -84,6 +84,20 @@ func (c *Client) Get(ctx context.Context, id string, obj any) error {
 		}
 	}
 
+	decryptedSchemaNameBytes, err := crypto.DecryptObjectProbabilistic(data.EncryptedSchemaName, ptDEK)
+	if err != nil {
+		if internal.IsContextError(err) {
+			return &errors.Error{
+				Op:  op,
+				Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
+			}
+		}
+		return &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: failed to decrypt schema name: %v", errors.ErrEncryption, err),
+		}
+	}
+
 	if err = json.Unmarshal(decryptedObjBytes, obj); err != nil {
 		return &errors.Error{
 			Op:  op,
@@ -108,7 +122,7 @@ func (c *Client) Get(ctx context.Context, id string, obj any) error {
 			Err: fmt.Errorf("%w: invalid GardbMeta type", errors.ErrValidation),
 		}
 	}
-	meta.SchemaName = data.SchemaName
+	meta.SchemaName = string(decryptedSchemaNameBytes)
 	meta.ID = id
 	meta.CreatedAt = data.CreatedAt
 	meta.UpdatedAt = data.UpdatedAt

@@ -140,11 +140,11 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 }
 
 type GetObjectResult struct {
-	EncryptedObj []byte
-	DEK          []byte
-	SchemaName   string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	EncryptedObj        []byte
+	EncryptedDEK        []byte
+	EncryptedSchemaName []byte
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 // Get retrieves an encrypted object by its ID and returns the encrypted payload.
@@ -207,7 +207,7 @@ func (c *APIClient) Get(ctx context.Context, id string) (GetObjectResult, error)
 	if err != nil {
 		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 	}
-	dek, err := base64.StdEncoding.DecodeString(respBody.EncryptedDEK)
+	encryptedDEK, err := base64.StdEncoding.DecodeString(respBody.EncryptedDEK)
 	if err != nil {
 		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 	}
@@ -216,17 +216,13 @@ func (c *APIClient) Get(ctx context.Context, id string) (GetObjectResult, error)
 	if err != nil {
 		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 	}
-	schemaNameBytes, err := crypto.DecryptObjectProbabilistic(encryptedSchemaName, dek)
-	if err != nil {
-		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrEncryption, err)
-	}
 
 	// Build and return the result
 	return GetObjectResult{
-		EncryptedObj: buf.Bytes(),
-		DEK:          dek,
-		SchemaName:   string(schemaNameBytes),
-		CreatedAt:    respBody.CreatedAt,
-		UpdatedAt:    respBody.UpdatedAt,
+		EncryptedObj:        buf.Bytes(),
+		EncryptedDEK:        encryptedDEK,
+		EncryptedSchemaName: encryptedSchemaName,
+		CreatedAt:           respBody.CreatedAt,
+		UpdatedAt:           respBody.UpdatedAt,
 	}, nil
 }
