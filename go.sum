@@ -1,9 +1,13 @@
 github.com/QodeSrl/gardbase/pkg/crypto v0.0.3-0.20251227223838-019f966eb526 h1:Tm2Lp2wolWlOdedjQ1LHShf6H+W0oYP/86JloPZzx2E=
 github.com/QodeSrl/gardbase/pkg/crypto v0.0.3-0.20251227223838-019f966eb526/go.mod h1:hEPWgkBwceQAQEBxUHEAjbbW6PVCLupaZIe1nz0n+f4=
+github.com/QodeSrl/gardbase/pkg/crypto v0.0.3-0.20260105143004-c1c1731cb962 h1:DN9scsUJmLbUroqS1BnYkU/vj74kQMw9XaNU4pc5bYQ=
+github.com/QodeSrl/gardbase/pkg/crypto v0.0.3-0.20260105143004-c1c1731cb962/go.mod h1:hEPWgkBwceQAQEBxUHEAjbbW6PVCLupaZIe1nz0n+f4=
 github.com/QodeSrl/gardbase/pkg/crypto v0.0.3 h1:RtO523XO8ghbYXOBgEXzwIfRvYVtKkL79m+3x7D30vk=
 github.com/QodeSrl/gardbase/pkg/crypto v0.0.3/go.mod h1:hEPWgkBwceQAQEBxUHEAjbbW6PVCLupaZIe1nz0n+f4=
 github.com/QodeSrl/gardbase/pkg/crypto v0.0.4 h1:P1/aMmladsd2X5K+HAnES8J1ex6VsvOyUGodk+VrbMg=
 github.com/QodeSrl/gardbase/pkg/crypto v0.0.4/go.mod h1:hEPWgkBwceQAQEBxUHEAjbbW6PVCLupaZIe1nz0n+f4=
+github.com/QodeSrl/gardbase/pkg/crypto v0.0.5 h1:4xYxWj74OBqeyj1NdrrqNUKxTJxyVM7t2GZzgX+6GJE=
+github.com/QodeSrl/gardbase/pkg/crypto v0.0.5/go.mod h1:hEPWgkBwceQAQEBxUHEAjbbW6PVCLupaZIe1nz0n+f4=
 github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.1 h1:dVHInja1FyYqrAirXOtzMpy3hCQpA4Ahsk/VUxx7QSg=
 github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.1/go.mod h1:274mRM3S6mIc1XtyL82Qr5IDGDcFW1jDIRL8gaPi1PI=
 github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.2-0.20251227215454-c0ebbbb1b7ca h1:AXUB2xghZqgLn4qJk6A7nYd9Nn7muI4JxJAWORI1bYU=
