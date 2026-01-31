@@ -1,25 +1,30 @@
 package gardb
 
 import (
+	"context"
 	"crypto/x509"
+	"fmt"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 	"github.com/QodeSrl/gardbase-sdk-go/internal"
+	"github.com/QodeSrl/gardbase-sdk-go/schema"
 )
 
 type Client struct {
 	mu            sync.RWMutex
 	apiClient     *internal.APIClient
 	enclaveClient *internal.EnclaveClient
+	cache         *internal.Cache
 	config        *Config
 }
 
 type Config struct {
 	// Required
 	APIEndpoint string
-	KMSKeyID    string
+	APIKey      string
 	TenantID    string
 
 	// Attestation verification
@@ -31,6 +36,7 @@ type Config struct {
 	// Optional
 	HTTPTimeout       time.Duration // default: 30 s
 	MaxAttestationAge time.Duration // default: 5 min
+	CacheDir          string        // path to cache directory, default: OS temp dir
 
 	// Retry settings
 	MaxRetries   int           // default: 3
@@ -67,8 +73,8 @@ func NewClient(config *Config) (*Client, error) {
 	if config.APIEndpoint == "" {
 		return nil, errors.ConfigError(op, "APIEndpoint is required")
 	}
-	if config.KMSKeyID == "" {
-		return nil, errors.ConfigError(op, "KMSKeyID is required")
+	if config.APIKey == "" {
+		return nil, errors.ConfigError(op, "APIKey is required")
 	}
 	if config.TenantID == "" {
 		return nil, errors.ConfigError(op, "TenantID is required")
@@ -81,6 +87,9 @@ func NewClient(config *Config) (*Client, error) {
 	}
 	if cfgCpy.MaxAttestationAge == 0 {
 		cfgCpy.MaxAttestationAge = 5 * time.Minute
+	}
+	if cfgCpy.CacheDir == "" {
+		cfgCpy.CacheDir = os.TempDir()
 	}
 	if cfgCpy.MaxRetries == 0 {
 		cfgCpy.MaxRetries = 3
@@ -98,9 +107,16 @@ func NewClient(config *Config) (*Client, error) {
 		cfgCpy.Logger = &defaultLogger{}
 	}
 
+	cache, err := internal.NewCache(cfgCpy.CacheDir)
+	if err != nil {
+		return nil, err
+	}
+
+	httpClient := internal.NewHttpClient(cfgCpy.TenantID, cfgCpy.APIKey, cfgCpy.HTTPTimeout)
+
 	enclaveClient := &internal.EnclaveClient{
 		APIEndpoint:             cfgCpy.APIEndpoint,
-		KMSKeyID:                cfgCpy.KMSKeyID,
+		HttpClient:              httpClient,
 		ExpectedPCRs:            cfgCpy.ExpectedPCRs,
 		VerifyAttestation:       cfgCpy.VerifyAttestation,
 		RootCA:                  cfgCpy.RootCA,
@@ -110,13 +126,14 @@ func NewClient(config *Config) (*Client, error) {
 		SessionRenewalThreshold: cfgCpy.SessionRenewalThreshold,
 	}
 
-	apiClient := internal.NewAPIClient(cfgCpy.APIEndpoint, cfgCpy.HTTPTimeout, cfgCpy.TenantID)
+	apiClient := internal.NewAPIClient(cfgCpy.APIEndpoint, cfgCpy.TenantID, cfgCpy.APIKey, httpClient)
 
 	client := &Client{
 		mu:            sync.RWMutex{},
 		config:        &cfgCpy,
 		enclaveClient: enclaveClient,
 		apiClient:     apiClient,
+		cache:         cache,
 	}
 
 	return client, nil
@@ -124,4 +141,51 @@ func NewClient(config *Config) (*Client, error) {
 
 func (c *Client) Close() error {
 	return c.enclaveClient.Close()
+}
+
+func (c *Client) Schema(ctx context.Context, name string, model Model) (*Schema, error) {
+	const op = "Client.Schema"
+
+	if name == "" {
+		return nil, &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: schema name cannot be empty", errors.ErrInvalidSchema),
+		}
+	}
+
+	if len(model) == 0 {
+		return nil, &errors.Error{
+			Op:  op,
+			Err: fmt.Errorf("%w: schema model cannot be empty", errors.ErrInvalidSchema),
+		}
+	}
+
+	fields := make(map[string]*schema.Field, len(model))
+	for fieldName, field := range model {
+		if fieldName == "" {
+			return nil, &errors.Error{
+				Op:  op,
+				Err: fmt.Errorf("%w: field name cannot be empty", errors.ErrInvalidSchema),
+			}
+		}
+		field.Name = fieldName
+		fields[fieldName] = field
+	}
+
+	tableHash, ok := c.cache.Get("tablehash__" + name)
+	if !ok {
+		tableHash, err := c.enclaveClient.GetTableHash(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		c.cache.Set("tablehash__"+name, tableHash)
+	}
+
+	s := &Schema{
+		name:      name,
+		tableHash: tableHash.(string),
+		fields:    fields,
+	}
+
+	return s, nil
 }
