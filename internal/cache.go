@@ -14,12 +14,16 @@ type Cache struct {
 }
 
 func NewCache(cacheDir string) (*Cache, error) {
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		return nil, err
+	}
+
 	c := &Cache{
 		data: make(map[string]any),
 		path: filepath.Join(cacheDir, "cache.json"),
 	}
 
-	if _, err := os.Stat(cacheDir); err == nil {
+	if _, err := os.Stat(c.path); err == nil {
 		bytes, err := os.ReadFile(c.path)
 		if err != nil {
 			return nil, err
@@ -54,5 +58,9 @@ func (c *Cache) save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(c.path, bytes, 0644)
+	tmp := c.path + ".tmp"
+	if err := os.WriteFile(tmp, bytes, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, c.path)
 }

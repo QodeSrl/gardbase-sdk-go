@@ -12,13 +12,13 @@ import (
 	"github.com/QodeSrl/gardbase/pkg/crypto"
 )
 
+// Get retrieves the object identified by id from Gardb and unmarshals it into obj.
+//
+// Get expects obj to be a pointer to a struct that contains a GardbMeta field.
 // Get retrieves the encrypted object with the given id from the remote API, decrypts its data encryption key (DEK)
 // using the enclave client, decrypts the stored object payload, and unmarshals the resulting JSON into obj.
-// obj must be a pointer to a struct that contains a GardbMeta field.
-// On success Get will also populate or update common metadata fields on the target struct:
-//   - UpdatedAt is set to the server's UpdatedAt timestamp.
-//   - CreatedAt is set to the server's CreatedAt timestamp.
-//   - ID is set to the provided id only if the struct's ID field is an empty string.
+//
+// On success Get updates the GardbMeta fields in obj with the ID, CreatedAt, and UpdatedAt values returned by the server.
 //
 // Parameters:
 //   - ctx: context for API and enclave operations.
@@ -31,7 +31,7 @@ func (s *Schema) Get(ctx context.Context, id string, obj any) error {
 	const op = "Schema.Get"
 
 	// Validate that ptrToStruct is a pointer to a struct that has a GardbMeta field
-	if validatePtrToStructWithGardbMeta(obj) {
+	if !validatePtrToStructWithGardbMeta(obj) {
 		return &errors.Error{
 			Op:  op,
 			Err: fmt.Errorf("%w: expected pointer to struct with GardbMeta field", errors.ErrValidation),

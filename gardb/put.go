@@ -12,15 +12,19 @@ import (
 // Put validates and persists obj to Gardb.
 //
 // Put expects obj to be a pointer to a struct that contains a GardbMeta field.
-// Put obtains the schema from obj.GardbMeta, extracts values and indexes
-// via schema.Extract, and requests a data-encryption key (DEK) from the enclave client. It uses the first returned DEK to
-// encrypt and upload the extracted values and indexes by calling the API client's Put method.
+// Put validates obj against the schema associated with the Schema instance, extracts its values and indexes,
+// generates a data encryption key (DEK) using the enclave client, and calls the API client's Put method
+// to handle encryption and upload of the object.
 //
-// On success Put updates the object's UpdatedAt field with the timestamp returned by the API and sets CreatedAt to the same
-// timestamp only if CreatedAt was previously the zero value. Context cancellation or timeouts are propagated to DEK
-// generation and the API call. Any error from validation, extraction, DEK generation, or the API upload is returned.
+// On success, Put updates the CreatedAt and UpdatedAt fields in the GardbMeta of obj with the timestamps returned by the server,
+// and sets the ID field with the object ID returned by the server.
 //
-// Side effects: mutates the provided obj (CreatedAt/UpdatedAt) and performs network/enclave operations.
+// Parameters:
+//   - ctx: context for API and enclave operations.
+//   - obj: object (pointer to struct) to validate and persist.
+//
+// Returns an error if the provided obj is invalid (ErrInvalidSchema), if validation fails, if the API call fails,
+// or if DEK generation fails (returns ErrSession for DEK generation failures).
 func (s *Schema) Put(ctx context.Context, obj any) error {
 	const op = "Schema.Put"
 
