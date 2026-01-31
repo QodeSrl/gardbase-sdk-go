@@ -7,7 +7,6 @@ import (
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 	"github.com/QodeSrl/gardbase-sdk-go/internal"
-	"github.com/QodeSrl/gardbase-sdk-go/schema"
 )
 
 // Put validates and persists obj to Gardb.
@@ -22,8 +21,8 @@ import (
 // generation and the API call. Any error from validation, extraction, DEK generation, or the API upload is returned.
 //
 // Side effects: mutates the provided obj (CreatedAt/UpdatedAt) and performs network/enclave operations.
-func (c *Client) Put(ctx context.Context, obj any) error {
-	const op = "Client.Put"
+func (s *Schema) Put(ctx context.Context, obj any) error {
+	const op = "Schema.Put"
 
 	if err := ctx.Err(); err != nil {
 		return &errors.Error{
@@ -32,42 +31,29 @@ func (c *Client) Put(ctx context.Context, obj any) error {
 		}
 	}
 
-	// Validate that ptrToStruct is a pointer to a struct that has a GardbMeta field
-	if !internal.ValidatePtrToStructWithGardbMeta(obj) {
+	// Validate that obj is a pointer to a struct
+	rv := reflect.ValueOf(obj)
+	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Struct {
 		return &errors.Error{
 			Op:  op,
-			Err: fmt.Errorf("%w: expected pointer to struct with GardbMeta field", errors.ErrValidation),
+			Err: fmt.Errorf("%w: expected pointer to struct, got %T", errors.ErrInvalidSchema, obj),
 		}
 	}
 
-	// Get the schema from the GardbMeta field
-	rv := reflect.ValueOf(obj).Elem()
-	metaField := rv.FieldByName("GardbMeta")
-
-	meta, ok := metaField.Interface().(schema.GardbMeta)
-	if !ok {
-		return &errors.Error{
-			Op:  op,
-			Err: fmt.Errorf("%w: GardbMeta field has wrong type", errors.ErrValidation),
-		}
-	}
-	schema, ok := meta.Schema()
-	if !ok {
-		return &errors.Error{
-			Op:  op,
-			Err: fmt.Errorf("%w: schema not initialized", errors.ErrValidation),
-		}
+	// Validate obj against the schema and initialize GardbMeta
+	if err := s.new(op, obj); err != nil {
+		return err
 	}
 
 	// Extract values and indexes from the object using the schema
-	values, indexes, err := schema.Extract(obj)
+	values, indexes, err := s.extract(obj)
 	if err != nil {
 		// return error, schema.Extract already returns *errors.Error
 		return err
 	}
 
 	// Generate a DEK using the enclave client
-	deks, err := c.enclaveClient.GenerateDEK(ctx, 1)
+	deks, err := s.client.enclaveClient.GenerateDEK(ctx, 1)
 	if err != nil {
 		if internal.IsContextError(err) {
 			return &errors.Error{
@@ -88,7 +74,7 @@ func (c *Client) Put(ctx context.Context, obj any) error {
 	}
 
 	// Call the API client's Put method to handle encryption and upload
-	respBody, err := c.apiClient.Put(ctx, values, indexes, deks[0], schema)
+	respBody, err := s.client.apiClient.Put(ctx, values, indexes, deks[0], s.name, s.tableHash)
 	if err != nil {
 		if internal.IsContextError(err) {
 			return &errors.Error{
@@ -102,8 +88,10 @@ func (c *Client) Put(ctx context.Context, obj any) error {
 		}
 	}
 
+	metaField := reflect.ValueOf(obj).Elem().FieldByName("GardbMeta")
 	// Update CreatedAt and UpdatedAt fields in the original object
 	if metaField.IsValid() && metaField.CanSet() {
+		meta := metaField.Interface().(GardbMeta)
 		// Update ID
 		meta.ID = respBody.ObjectID
 		// Update timestamps
