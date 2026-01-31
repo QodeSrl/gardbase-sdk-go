@@ -1,8 +1,11 @@
 package gardb
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"github.com/QodeSrl/gardbase-sdk-go/schema"
 )
 
 type testLogger struct{}
@@ -22,23 +25,28 @@ func TestNewClient_NilConfig(t *testing.T) {
 	}
 }
 
-func TestNewClient_MissingAPIEndpointOrKMSKeyID(t *testing.T) {
+func TestNewClient_MissingRequiredFields(t *testing.T) {
 	// Missing APIEndpoint
-	_, err := NewClient(&Config{KMSKeyID: "key"})
+	_, err := NewClient(&Config{APIKey: "key", TenantID: "tenant"})
 	if err == nil {
 		t.Fatalf("expected error when APIEndpoint is missing")
 	}
-	// Missing KMSKeyID
-	_, err = NewClient(&Config{APIEndpoint: "https://api"})
+	// Missing APIKey
+	_, err = NewClient(&Config{APIEndpoint: "https://api", TenantID: "tenant"})
 	if err == nil {
-		t.Fatalf("expected error when KMSKeyID is missing")
+		t.Fatalf("expected error when APIKey is missing")
+	}
+	// Missing TenantID
+	_, err = NewClient(&Config{APIEndpoint: "https://api", APIKey: "key"})
+	if err == nil {
+		t.Fatalf("expected error when TenantID is missing")
 	}
 }
 
 func TestNewClient_DefaultsApplied(t *testing.T) {
 	cfg := &Config{
 		APIEndpoint: "https://api.example",
-		KMSKeyID:    "kms-key",
+		APIKey:      "api-key",
 		TenantID:    "tenant-123",
 	}
 	c, err := NewClient(cfg)
@@ -84,7 +92,8 @@ func TestNewClient_CustomConfigPreservedAndCopied(t *testing.T) {
 	logger := &testLogger{}
 	cfg := &Config{
 		APIEndpoint:             "https://api.custom",
-		KMSKeyID:                "custom-key",
+		APIKey:                  "custom-key",
+		TenantID:                "tenant-x",
 		HTTPTimeout:             10 * time.Second,
 		MaxAttestationAge:       2 * time.Minute,
 		MaxRetries:              5,
@@ -114,5 +123,25 @@ func TestNewClient_CustomConfigPreservedAndCopied(t *testing.T) {
 	cfg.HTTPTimeout = 1 * time.Nanosecond
 	if c.config.HTTPTimeout == cfg.HTTPTimeout {
 		t.Fatalf("client config should not reflect changes to original config after NewClient")
+	}
+}
+
+func TestSchema_ValidationErrors(t *testing.T) {
+	cfg := &Config{
+		APIEndpoint: "https://api.example",
+		APIKey:      "api-key",
+		TenantID:    "tenant-123",
+	}
+	c, err := NewClient(cfg)
+	ctx := context.Background()
+	// Empty name
+	_, err = c.Schema(ctx, "", Model{"f": schema.String()})
+	if err == nil {
+		t.Fatalf("expected error for empty schema name")
+	}
+	// Empty model
+	_, err = c.Schema(ctx, "users", Model{})
+	if err == nil {
+		t.Fatalf("expected error for empty schema model")
 	}
 }

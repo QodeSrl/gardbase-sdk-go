@@ -7,8 +7,8 @@ import (
 )
 
 func TestGet_ReturnsValidationError_ForNonPointer(t *testing.T) {
-	c := &Client{}
-	err := c.Get(context.Background(), "id", 123)
+	s := &Schema{}
+	err := s.Get(context.Background(), "id", 123)
 	if err == nil {
 		t.Fatalf("expected validation error for non-pointer obj")
 	}
@@ -21,8 +21,8 @@ func TestGet_ReturnsValidationError_ForStructWithoutGardbMeta(t *testing.T) {
 	type NoMeta struct {
 		Name string
 	}
-	c := &Client{}
-	err := c.Get(context.Background(), "id", &NoMeta{Name: "x"})
+	s := &Schema{}
+	err := s.Get(context.Background(), "id", &NoMeta{Name: "x"})
 	if err == nil {
 		t.Fatalf("expected validation error for struct without GardbMeta")
 	}

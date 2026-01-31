@@ -1,5 +1,5 @@
-github.com/QodeSrl/gardbase/pkg/api v0.0.1 h1:o3k3+Vf9A/2pPJcfbcaZ/wM6SGo5+KI3QDLI5E47vQw=
-github.com/QodeSrl/gardbase/pkg/api v0.0.1/go.mod h1:f7N2K5Xmst0jHp2hAGjab8hdVWKqpQDbYXKXf6KRwEw=
+github.com/QodeSrl/gardbase/pkg/api v0.0.2 h1:33Iv/JAFAXXh9Sxg6x6gYQoPKmINRWsaeyscT9YDk+Y=
+github.com/QodeSrl/gardbase/pkg/api v0.0.2/go.mod h1:f7N2K5Xmst0jHp2hAGjab8hdVWKqpQDbYXKXf6KRwEw=
 github.com/QodeSrl/gardbase/pkg/crypto v0.0.6 h1:uQddWJwnGduVpGLri+8dXLo61q4wCtmtGTRzOLmhXQc=
 github.com/QodeSrl/gardbase/pkg/crypto v0.0.6/go.mod h1:hEPWgkBwceQAQEBxUHEAjbbW6PVCLupaZIe1nz0n+f4=
 github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.4 h1:w3V78FglgXc/GbFhA5H1FN8+68Am0dP8ybEBlq0CmEY=

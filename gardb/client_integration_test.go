@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 package gardb_test
 
 import (
@@ -20,7 +23,7 @@ func getEnv(key, defaultValue string) string {
 func TestIntegration_PutGetWorkflow(t *testing.T) {
 	client, err := gardb.NewClient(&gardb.Config{
 		APIEndpoint:         getEnv("TEST_GARDB_API_ENDPOINT", "https://api.gardbase.com"),
-		KMSKeyID:            getEnv("TEST_GARDB_KMS_KEY_ID", ""),
+		APIKey:              getEnv("TEST_GARDB_API_KEY", "test_api_key"),
 		TenantID:            "test123tenant",
 		VerifyAttestation:   false,
 		SkipPCRVerification: true,
@@ -31,7 +34,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 	ctx := context.Background()
 
 	type Book struct {
-		schema.GardbMeta
+		gardb.GardbMeta
 		Name   string `gardb:"name"`
 		Author string `gardb:"author"`
 		Pages  int    `gardb:"pages"`
@@ -39,9 +42,18 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 
 	var bookId string
 
+	bookSchema, err := client.Schema(ctx, "book", gardb.Model{
+		"name":   schema.String().Required(),
+		"author": schema.String().Required(),
+		"pages":  schema.Int().Required(),
+	})
+	if err != nil {
+		t.Fatalf("Failed to create schema: %v", err)
+	}
+
 	t.Run("connect", func(t *testing.T) {
 		t.Log("Checking API connectivity...")
-		resp, err := http.Get(getEnv("TEST_GARDB_API_ENDPOINT", "https://api.gardbase.com") + "/health")
+		resp, err := http.Get(getEnv("TEST_GARDB_API_ENDPOINT", "https://api.gardbase.com") + "/api/health")
 		if err != nil {
 			t.Fatalf("API not reachable: %v", err)
 		}
@@ -50,14 +62,6 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 
 	t.Run("create object", func(t *testing.T) {
 		t.Log("Creating book object...")
-		bookSchema, err := schema.New("book", schema.Model{
-			"name":   schema.String().Required(),
-			"author": schema.String().Required(),
-			"pages":  schema.Int().Required(),
-		})
-		if err != nil {
-			t.Fatalf("Failed to create schema: %v", err)
-		}
 
 		book := Book{
 			Name:   "The Go Programming Language",
@@ -65,13 +69,8 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 			Pages:  380,
 		}
 
-		t.Log("Initializing book object...")
-		if err := bookSchema.New(&book); err != nil {
-			t.Fatalf("Failed to initialize book object: %v", err)
-		}
-
 		t.Log("Putting book object to Gardb...")
-		if err := client.Put(ctx, &book); err != nil {
+		if err := bookSchema.Put(ctx, &book); err != nil {
 			t.Fatalf("Failed to put book: %v", err)
 		}
 
@@ -82,7 +81,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 		var retrievedBook Book
 
 		t.Log("Getting book object from Gardb...")
-		if err := client.Get(ctx, bookId, &retrievedBook); err != nil {
+		if err := bookSchema.Get(ctx, bookId, &retrievedBook); err != nil {
 			t.Fatalf("Failed to get book: %v", err)
 		}
 

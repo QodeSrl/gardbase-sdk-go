@@ -6,33 +6,43 @@ import (
 	"testing"
 )
 
-func TestPut_ContextError(t *testing.T) {
+func TestPut_InvalidObject_NonPointer(t *testing.T) {
+	s := &Schema{}
+	// non-pointer (struct) should return invalid schema error
+	err := s.Put(context.Background(), struct{}{})
+	if err == nil {
+		t.Fatal("expected error for non-pointer input, got nil")
+	}
+	if !strings.Contains(err.Error(), "expected pointer to struct") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPut_InvalidObject_PointerToNonStruct(t *testing.T) {
+	s := &Schema{}
+	i := 1
+	// pointer to non-struct should return invalid schema error
+	err := s.Put(context.Background(), &i)
+	if err == nil {
+		t.Fatal("expected error for pointer to non-struct input, got nil")
+	}
+	if !strings.Contains(err.Error(), "expected pointer to struct") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPut_ContextCancelled(t *testing.T) {
+	s := &Schema{}
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	c := &Client{}
-	err := c.Put(ctx, nil)
-	if err == nil || !strings.Contains(err.Error(), "context error") {
-		t.Fatalf("expected context error, got: %v", err)
+	cancel() // make ctx.Err() non-nil
+	obj := &struct {
+		GardbMeta GardbMeta
+	}{}
+	err := s.Put(ctx, obj)
+	if err == nil {
+		t.Fatal("expected error for cancelled context, got nil")
 	}
-}
-
-func TestPut_InvalidPointer(t *testing.T) {
-	c := &Client{}
-	obj := &struct{ X int }{X: 1}
-	err := c.Put(context.Background(), obj)
-	if err == nil || !strings.Contains(err.Error(), "expected pointer to struct with GardbMeta field") {
-		t.Fatalf("expected validation error about GardbMeta field, got: %v", err)
-	}
-}
-
-func TestPut_WrongGardbMetaType(t *testing.T) {
-	c := &Client{}
-	type S struct {
-		GardbMeta int
-	}
-	obj := &S{GardbMeta: 1}
-	err := c.Put(context.Background(), obj)
-	if err == nil || !strings.Contains(err.Error(), "expected pointer to struct with GardbMeta field") {
-		t.Fatalf("expected GardbMeta type error, got: %v", err)
+	if !strings.Contains(err.Error(), "context error") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
