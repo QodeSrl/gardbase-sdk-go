@@ -10,9 +10,8 @@ import (
 	"time"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
-	"github.com/QodeSrl/gardbase-sdk-go/schema"
+	"github.com/QodeSrl/gardbase/pkg/api/objects"
 	"github.com/QodeSrl/gardbase/pkg/crypto"
-	"github.com/QodeSrl/gardbase/pkg/models"
 )
 
 type APIClient struct {
@@ -21,41 +20,23 @@ type APIClient struct {
 	httpClient *http.Client
 }
 
-type TenantRoundTripper struct {
-	Base     http.RoundTripper
-	TenantID string
-}
-
-func (t TenantRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	req = req.Clone(req.Context())
-	req.Header.Set("X-Tenant-ID", t.TenantID)
-	return t.base().RoundTrip(req)
-}
-
-func (t TenantRoundTripper) base() http.RoundTripper {
-	if t.Base != nil {
-		return t.Base
-	}
-	return http.DefaultTransport
-}
-
-func NewAPIClient(apiEndpoint string, httpTimeout time.Duration, tenantID string) *APIClient {
+func NewAPIClient(apiEndpoint string, tenantID string, apiKey string, httpClient *http.Client) *APIClient {
 	return &APIClient{
 		APIEndpoint: apiEndpoint + "/api",
-		httpClient:  &http.Client{Timeout: httpTimeout, Transport: TenantRoundTripper{TenantID: tenantID}},
+		httpClient:  httpClient,
 	}
 }
 
 // Put encrypts a JSON object and its indexed fields, creates a remote object record, and uploads the encrypted object payload.
-func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[string]any, dek crypto.GeneratedDEK, schema *schema.Schema) (models.CreateObjectResponse, error) {
+func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[string]any, dek crypto.GeneratedDEK, schemaName string, tableHash string) (objects.CreateObjectResponse, error) {
 	// Encrypt object with DEK
 	objBytes, err := json.Marshal(values)
 	if err != nil {
-		return models.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
+		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
 	}
 	encryptedObj, err := crypto.EncryptObjectProbabilistic(objBytes, dek.PlaintextDEK)
 	if err != nil {
-		return models.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrEncryption, err)
+		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrEncryption, err)
 	}
 
 	// Encrypt indexes with DEK
@@ -63,94 +44,91 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 	for k, v := range indexes {
 		indexBytes, err := json.Marshal(v)
 		if err != nil {
-			return models.CreateObjectResponse{}, fmt.Errorf("%w: (index %s) %v", errors.ErrValidation, k, err)
+			return objects.CreateObjectResponse{}, fmt.Errorf("%w: (index %s) %v", errors.ErrValidation, k, err)
 		}
-		context := fmt.Sprintf("%s:%s", schema.Name(), k)
+		context := fmt.Sprintf("%s:%s", schemaName, k)
 		encryptedIndex, err := crypto.EncryptObjectDeterministic(indexBytes, context, dek.PlaintextDEK)
 		if err != nil {
-			return models.CreateObjectResponse{}, fmt.Errorf("%w: (index %s) %v", errors.ErrEncryption, k, err)
+			return objects.CreateObjectResponse{}, fmt.Errorf("%w: (index %s) %v", errors.ErrEncryption, k, err)
 		}
 		encryptedIndexesB64[k] = base64.StdEncoding.EncodeToString(encryptedIndex)
 	}
 
-	encryptedSchemaName, err := crypto.EncryptObjectProbabilistic([]byte(schema.Name()), dek.PlaintextDEK)
-	if err != nil {
-		return models.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrEncryption, err)
-	}
-
-	reqBody, err := json.Marshal(models.CreateObjectRequest{
-		EncryptedDEK:        base64.StdEncoding.EncodeToString(dek.EncryptedDEK),
-		EncryptedSchemaName: base64.StdEncoding.EncodeToString(encryptedSchemaName),
-		Indexes:             encryptedIndexesB64,
-		Sensitivity:         "medium",
+	reqBody, err := json.Marshal(objects.CreateObjectRequest{
+		KMSEncryptedDEK:    base64.StdEncoding.EncodeToString(dek.KMSEncryptedDEK),
+		MasterEncryptedDEK: base64.StdEncoding.EncodeToString(dek.MasterKeyEncryptedDEK),
+		DEKNonce:           base64.StdEncoding.EncodeToString(dek.MasterKeyNonce),
+		Indexes:            encryptedIndexesB64,
+		Sensitivity:        "medium",
 	})
 	if err != nil {
-		return models.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
+		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
 	}
 
 	// Create remote object record
-	req, err := http.NewRequestWithContext(ctx, "POST", c.APIEndpoint+"/objects", bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.APIEndpoint+"/objects/"+tableHash, bytes.NewReader(reqBody))
 	if err != nil {
-		return models.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
+		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return models.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrNetwork, err)
+		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrNetwork, err)
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return models.CreateObjectResponse{}, fmt.Errorf("%w: unauthorized access when creating object", errors.ErrUnauthorized)
+			return objects.CreateObjectResponse{}, fmt.Errorf("%w: unauthorized access when creating object", errors.ErrUnauthorized)
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
-			return models.CreateObjectResponse{}, fmt.Errorf("%w: rate limit exceeded when creating object", errors.ErrRateLimited)
+			return objects.CreateObjectResponse{}, fmt.Errorf("%w: rate limit exceeded when creating object", errors.ErrRateLimited)
 		}
-		return models.CreateObjectResponse{}, fmt.Errorf("%w: failed to create object, status code: %d", errors.ErrNetwork, resp.StatusCode)
+		return objects.CreateObjectResponse{}, fmt.Errorf("%w: failed to create object, status code: %d", errors.ErrNetwork, resp.StatusCode)
 	}
 	defer resp.Body.Close()
 
-	respBody := models.CreateObjectResponse{}
+	respBody := objects.CreateObjectResponse{}
 	err = json.NewDecoder(resp.Body).Decode(&respBody)
 	if err != nil {
-		return models.CreateObjectResponse{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 	}
 
 	// Upload encrypted object to S3
 	req, err = http.NewRequestWithContext(ctx, "PUT", respBody.UploadURL, bytes.NewReader(encryptedObj))
 	if err != nil {
-		return models.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
+		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 	resp, err = c.httpClient.Do(req)
 	if err != nil {
-		return models.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrNetwork, err)
+		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrNetwork, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return models.CreateObjectResponse{}, fmt.Errorf("%w: unauthorized access to S3 upload URL", errors.ErrUnauthorized)
+			return objects.CreateObjectResponse{}, fmt.Errorf("%w: unauthorized access to S3 upload URL", errors.ErrUnauthorized)
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
-			return models.CreateObjectResponse{}, fmt.Errorf("%w: rate limit exceeded when uploading to S3", errors.ErrRateLimited)
+			return objects.CreateObjectResponse{}, fmt.Errorf("%w: rate limit exceeded when uploading to S3", errors.ErrRateLimited)
 		}
-		return models.CreateObjectResponse{}, fmt.Errorf("%w: failed to upload object to S3, status code: %d", errors.ErrNetwork, resp.StatusCode)
+		return objects.CreateObjectResponse{}, fmt.Errorf("%w: failed to upload object to S3, status code: %d", errors.ErrNetwork, resp.StatusCode)
 	}
 
 	return respBody, nil
 }
 
 type GetObjectResult struct {
-	EncryptedObj        []byte
-	EncryptedDEK        []byte
-	EncryptedSchemaName []byte
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	EncryptedObj     []byte
+	KMSWrappedDEK    []byte
+	MasterWrappedDEK []byte
+	DEKNonce         []byte
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // Get retrieves an encrypted object by its ID and returns the encrypted payload.
-func (c *APIClient) Get(ctx context.Context, id string) (GetObjectResult, error) {
+func (c *APIClient) Get(ctx context.Context, tableHash string, id string) (GetObjectResult, error) {
 	// Call the API and get the object metadata and S3 URL
-	req, err := http.NewRequestWithContext(ctx, "GET", c.APIEndpoint+"/objects/"+id, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", c.APIEndpoint+"/objects/"+tableHash+"/"+id, nil)
 	if err != nil {
 		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
 	}
@@ -172,7 +150,7 @@ func (c *APIClient) Get(ctx context.Context, id string) (GetObjectResult, error)
 		}
 		return GetObjectResult{}, fmt.Errorf("%w: failed to get object, status code: %d", errors.ErrNetwork, resp.StatusCode)
 	}
-	respBody := models.GetObjectResponse{}
+	respBody := objects.GetObjectResponse{}
 	err = json.NewDecoder(resp.Body).Decode(&respBody)
 	if err != nil {
 		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
@@ -207,22 +185,28 @@ func (c *APIClient) Get(ctx context.Context, id string) (GetObjectResult, error)
 	if err != nil {
 		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 	}
-	encryptedDEK, err := base64.StdEncoding.DecodeString(respBody.EncryptedDEK)
+	KMSWrappedDEK, err := base64.StdEncoding.DecodeString(respBody.KMSWrappedDEK)
 	if err != nil {
 		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 	}
 
-	encryptedSchemaName, err := base64.StdEncoding.DecodeString(respBody.EncryptedSchemaName)
+	MasterWrappedDEK, err := base64.StdEncoding.DecodeString(respBody.MasterWrappedDEK)
+	if err != nil {
+		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+	}
+
+	DEKNonce, err := base64.StdEncoding.DecodeString(respBody.DEKNonce)
 	if err != nil {
 		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 	}
 
 	// Build and return the result
 	return GetObjectResult{
-		EncryptedObj:        buf.Bytes(),
-		EncryptedDEK:        encryptedDEK,
-		EncryptedSchemaName: encryptedSchemaName,
-		CreatedAt:           respBody.CreatedAt,
-		UpdatedAt:           respBody.UpdatedAt,
+		EncryptedObj:     buf.Bytes(),
+		KMSWrappedDEK:    KMSWrappedDEK,
+		MasterWrappedDEK: MasterWrappedDEK,
+		DEKNonce:         DEKNonce,
+		CreatedAt:        respBody.CreatedAt,
+		UpdatedAt:        respBody.UpdatedAt,
 	}, nil
 }
