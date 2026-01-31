@@ -1,15 +1,22 @@
 package internal
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
+	"github.com/QodeSrl/gardbase/pkg/api/objects"
 	"github.com/QodeSrl/gardbase/pkg/crypto"
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
 type EnclaveClient struct {
@@ -17,7 +24,8 @@ type EnclaveClient struct {
 	essMu sync.RWMutex
 
 	APIEndpoint string
-	KMSKeyID    string
+
+	HttpClient *http.Client
 
 	// Attestation Verification
 	ExpectedPCRs        map[uint]string
@@ -67,7 +75,7 @@ func (ec *EnclaveClient) ensureSession(ctx context.Context) error {
 
 func (ec *EnclaveClient) initEnclaveSecureSessionLocked(ctx context.Context) error {
 	config := crypto.SessionConfig{
-		Endpoint:          ec.APIEndpoint + "/enclave",
+		Endpoint:          ec.APIEndpoint + "/encryption",
 		ExpectedPCRs:      ec.ExpectedPCRs,
 		RootCA:            ec.RootCA,
 		MaxAttestationAge: ec.MaxAttestationAge,
@@ -117,7 +125,7 @@ func (ec *EnclaveClient) GenerateDEK(ctx context.Context, count int) ([]crypto.G
 	ec.essMu.RLock()
 	defer ec.essMu.RUnlock()
 
-	return ec.ess.GenerateDEK(ctx, ec.KMSKeyID, count)
+	return ec.ess.GenerateDEK(ctx, count)
 }
 
 func (ec *EnclaveClient) DecryptDEK(ctx context.Context, objectID string, encryptedDEKB64 string) ([]byte, error) {
@@ -133,7 +141,7 @@ func (ec *EnclaveClient) DecryptDEK(ctx context.Context, objectID string, encryp
 	}
 	items := []enclaveproto.SessionUnwrapItem{item}
 
-	res, err := ec.ess.SessionUnwrap(ctx, items, ec.KMSKeyID)
+	res, err := ec.ess.SessionUnwrap(ctx, items)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errors.ErrEncryption, err)
 	}
@@ -146,4 +154,52 @@ func (ec *EnclaveClient) DecryptDEK(ctx context.Context, objectID string, encryp
 		return nil, fmt.Errorf("%w: failed to unseal DEK: %v", errors.ErrEncryption, err)
 	}
 	return dek, nil
+}
+
+func (ec *EnclaveClient) GetTableHash(ctx context.Context, tableName string) (string, error) {
+	if err := ec.ensureSession(ctx); err != nil {
+		return "", fmt.Errorf("%w: %w", errors.ErrSession, err)
+	}
+	ec.essMu.RLock()
+	defer ec.essMu.RUnlock()
+
+	// Encrypt table name with shared session key
+	aead, err := chacha20poly1305.NewX(ec.ess.SessionKey)
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to create AEAD cipher: %v", errors.ErrEncryption, err)
+	}
+
+	nonce := make([]byte, chacha20poly1305.NonceSizeX) // 24 bytes
+	if _, err := rand.Read(nonce); err != nil {
+		return "", fmt.Errorf("%w: failed to generate nonce: %v", errors.ErrEncryption, err)
+	}
+	encryptedTableName := aead.Seal(nil, nonce, []byte(tableName), nil)
+
+	reqBody, err := json.Marshal(objects.GetTableHashRequest{
+		SessionID:                 ec.ess.SessionId,
+		SessionEncryptedTableName: base64.StdEncoding.EncodeToString(encryptedTableName),
+		SessionTableNameNonce:     base64.StdEncoding.EncodeToString(nonce),
+	})
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to marshal request body: %v", errors.ErrValidation, err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", ec.APIEndpoint+"/objects/table-hash", bytes.NewReader(reqBody))
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to create request: %v", errors.ErrValidation, err)
+	}
+	resp, err := ec.HttpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to perform request: %v", errors.ErrNetwork, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("%w: failed to get table hash, status code: %d", errors.ErrNetwork, resp.StatusCode)
+	}
+	var getTableHashResp objects.GetTableHashResponse
+	if err := json.NewDecoder(resp.Body).Decode(&getTableHashResp); err != nil {
+		return "", fmt.Errorf("%w: failed to decode response body: %v", errors.ErrNetwork, err)
+	}
+	return getTableHashResp.TableHash, nil
 }
