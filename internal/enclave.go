@@ -24,6 +24,8 @@ type EnclaveClient struct {
 	essMu sync.RWMutex
 
 	APIEndpoint string
+	TenantID    string
+	APIKey      string
 
 	HttpClient *http.Client
 
@@ -76,6 +78,8 @@ func (ec *EnclaveClient) ensureSession(ctx context.Context) error {
 func (ec *EnclaveClient) initEnclaveSecureSessionLocked(ctx context.Context) error {
 	config := crypto.SessionConfig{
 		Endpoint:          ec.APIEndpoint + "/encryption",
+		TenantID:          ec.TenantID,
+		APIKey:            ec.APIKey,
 		ExpectedPCRs:      ec.ExpectedPCRs,
 		RootCA:            ec.RootCA,
 		MaxAttestationAge: ec.MaxAttestationAge,

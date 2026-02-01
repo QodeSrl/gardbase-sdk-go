@@ -4,13 +4,16 @@
 package gardb_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"testing"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb"
 	"github.com/QodeSrl/gardbase-sdk-go/schema"
+	"github.com/QodeSrl/gardbase/pkg/api/tenants"
 )
 
 func getEnv(key, defaultValue string) string {
@@ -21,10 +24,34 @@ func getEnv(key, defaultValue string) string {
 }
 
 func TestIntegration_PutGetWorkflow(t *testing.T) {
+	apiEndpoint := getEnv("TEST_GARDB_API_ENDPOINT", "https://api.gardbase.com")
+
+	httpClient := &http.Client{}
+	payload := map[string]string{}
+	jsonData, _ := json.Marshal(payload)
+	req, err := http.NewRequest("POST", apiEndpoint+"/api/tenants/", bytes.NewBuffer(jsonData))
+	if err != nil {
+		t.Fatalf("Failed to create tenant creation request: %v", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to create tenant: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var data tenants.CreateTenantResponse
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		t.Fatalf("Failed to decode tenant creation response: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Unexpected status code %d when creating tenant: %s", resp.StatusCode, data)
+	}
+
 	client, err := gardb.NewClient(&gardb.Config{
-		APIEndpoint:         getEnv("TEST_GARDB_API_ENDPOINT", "https://api.gardbase.com"),
-		APIKey:              getEnv("TEST_GARDB_API_KEY", "test_api_key"),
-		TenantID:            "test123tenant",
+		APIEndpoint:         apiEndpoint,
+		APIKey:              data.APIKey,
+		TenantID:            data.TenantID,
 		VerifyAttestation:   false,
 		SkipPCRVerification: true,
 	})

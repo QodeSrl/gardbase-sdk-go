@@ -115,7 +115,9 @@ func NewClient(config *Config) (*Client, error) {
 	httpClient := internal.NewHttpClient(cfgCpy.TenantID, cfgCpy.APIKey, cfgCpy.HTTPTimeout)
 
 	enclaveClient := &internal.EnclaveClient{
-		APIEndpoint:             cfgCpy.APIEndpoint,
+		APIEndpoint:             cfgCpy.APIEndpoint + "/api",
+		TenantID:                cfgCpy.TenantID,
+		APIKey:                  cfgCpy.APIKey,
 		HttpClient:              httpClient,
 		ExpectedPCRs:            cfgCpy.ExpectedPCRs,
 		VerifyAttestation:       cfgCpy.VerifyAttestation,
