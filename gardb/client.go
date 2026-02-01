@@ -175,18 +175,20 @@ func (c *Client) Schema(ctx context.Context, name string, model Model) (*Schema,
 	}
 
 	tableHash, ok := c.cache.Get("tablehash__" + name)
-	if !ok {
-		tableHash, err := c.enclaveClient.GetTableHash(ctx, name)
+	if !ok || tableHash == "" || tableHash == nil {
+		hash, err := c.enclaveClient.GetTableHash(ctx, name)
 		if err != nil {
 			return nil, err
 		}
-		c.cache.Set("tablehash__"+name, tableHash)
+		c.cache.Set("tablehash__"+name, hash)
+		tableHash = hash
 	}
 
 	s := &Schema{
 		name:      name,
 		tableHash: tableHash.(string),
 		fields:    fields,
+		client:    c,
 	}
 
 	return s, nil
