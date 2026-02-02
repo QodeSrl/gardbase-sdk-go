@@ -55,6 +55,7 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 	}
 
 	reqBody, err := json.Marshal(objects.CreateObjectRequest{
+		BlobSize:           int64(len(encryptedObj)),
 		KMSEncryptedDEK:    base64.StdEncoding.EncodeToString(dek.KMSEncryptedDEK),
 		MasterEncryptedDEK: base64.StdEncoding.EncodeToString(dek.MasterKeyEncryptedDEK),
 		DEKNonce:           base64.StdEncoding.EncodeToString(dek.MasterKeyNonce),
@@ -92,7 +93,7 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 	}
 
-	// Upload encrypted object to S3
+	// Upload encrypted object
 	req, err = http.NewRequestWithContext(ctx, "PUT", respBody.UploadURL, bytes.NewReader(encryptedObj))
 	if err != nil {
 		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
@@ -105,12 +106,12 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return objects.CreateObjectResponse{}, fmt.Errorf("%w: unauthorized access to S3 upload URL", errors.ErrUnauthorized)
+			return objects.CreateObjectResponse{}, fmt.Errorf("%w: unauthorized access to upload URL", errors.ErrUnauthorized)
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
-			return objects.CreateObjectResponse{}, fmt.Errorf("%w: rate limit exceeded when uploading to S3", errors.ErrRateLimited)
+			return objects.CreateObjectResponse{}, fmt.Errorf("%w: rate limit exceeded when uploading encrypted object", errors.ErrRateLimited)
 		}
-		return objects.CreateObjectResponse{}, fmt.Errorf("%w: failed to upload object to S3, status code: %d", errors.ErrNetwork, resp.StatusCode)
+		return objects.CreateObjectResponse{}, fmt.Errorf("%w: failed to upload encrypted object, status code: %d", errors.ErrNetwork, resp.StatusCode)
 	}
 
 	return respBody, nil

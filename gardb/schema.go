@@ -43,6 +43,23 @@ func validatePtrToStructWithGardbMeta(obj any) bool {
 	return true
 }
 
+func validatePtrToSliceOfStructsWithGardbMeta(obj any) bool {
+	rv := reflect.ValueOf(obj)
+	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Slice {
+		return false
+	}
+	rv = rv.Elem()
+	elemType := rv.Type().Elem()
+	if elemType.Kind() != reflect.Struct {
+		return false
+	}
+	field, ok := elemType.FieldByName("GardbMeta")
+	if !ok || field.Type != reflect.TypeOf(GardbMeta{}) {
+		return false
+	}
+	return true
+}
+
 type Model map[string]*schema.Field // schema.String(), schema.Int(), etc.
 
 // Name returns the name of the schema
