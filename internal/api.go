@@ -118,6 +118,7 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 }
 
 type GetObjectResult struct {
+	ObjectID         string
 	EncryptedObj     []byte
 	KMSWrappedDEK    []byte
 	MasterWrappedDEK []byte
@@ -214,6 +215,7 @@ func (c *APIClient) Get(ctx context.Context, tableHash string, id string) (GetOb
 
 	// Build and return the result
 	return GetObjectResult{
+		ObjectID:         id,
 		EncryptedObj:     encryptedObj,
 		KMSWrappedDEK:    KMSWrappedDEK,
 		MasterWrappedDEK: MasterWrappedDEK,
@@ -221,4 +223,114 @@ func (c *APIClient) Get(ctx context.Context, tableHash string, id string) (GetOb
 		CreatedAt:        respBody.CreatedAt,
 		UpdatedAt:        respBody.UpdatedAt,
 	}, nil
+}
+
+type ScanResult = []GetObjectResult
+
+func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextToken *string) (ScanResult, error) {
+	// Call the API and get the list of objects
+	reqBody, err := json.Marshal(objects.ScanRequest{
+		TableHash: tableHash,
+		Limit:     limit,
+		NextToken: nextToken,
+	})
+	if err != nil {
+		return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", c.APIEndpoint+"/objects/"+tableHash+"/scan", bytes.NewReader(reqBody))
+	if err != nil {
+		return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return ScanResult{}, fmt.Errorf("%w: unauthorized access", errors.ErrUnauthorized)
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return ScanResult{}, fmt.Errorf("%w: rate limit exceeded when scanning table", errors.ErrRateLimited)
+		}
+		return ScanResult{}, fmt.Errorf("%w: failed to scan table, status code: %d", errors.ErrNetwork, resp.StatusCode)
+	}
+	respBody := objects.ScanResponse{}
+	err = json.NewDecoder(resp.Body).Decode(&respBody)
+	if err != nil {
+		return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+	}
+
+	var results ScanResult
+
+	for _, obj := range respBody.Objects {
+		var encryptedObj []byte
+
+		if obj.GetURL != "" {
+			// Download the encrypted object from S3
+			req, err = http.NewRequestWithContext(ctx, "GET", obj.GetURL, nil)
+			if err != nil {
+				return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
+			}
+			req.Header.Set("Content-Type", "application/octet-stream")
+			resp, err = c.httpClient.Do(req)
+			if err != nil {
+				return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				if resp.StatusCode == http.StatusNotFound {
+					return ScanResult{}, fmt.Errorf("%w: object with ID %s not found in S3", errors.ErrNotFound, obj.ObjectID)
+				}
+				if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+					return ScanResult{}, fmt.Errorf("%w: unauthorized access to object with ID %s in S3", errors.ErrUnauthorized, obj.ObjectID)
+				}
+				if resp.StatusCode == http.StatusTooManyRequests {
+					return ScanResult{}, fmt.Errorf("%w: rate limit exceeded when accessing object with ID %s in S3", errors.ErrRateLimited, obj.ObjectID)
+				}
+				return ScanResult{}, fmt.Errorf("%w: failed to get object from S3, status code: %d", errors.ErrNetwork, resp.StatusCode)
+			}
+
+			buf := new(bytes.Buffer)
+			_, err = buf.ReadFrom(resp.Body)
+			if err != nil {
+				return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+			}
+			encryptedObj = buf.Bytes()
+		} else {
+			encryptedObj, err = base64.StdEncoding.DecodeString(obj.EncryptedBlob)
+			if err != nil {
+				return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+			}
+		}
+
+		KMSWrappedDEK, err := base64.StdEncoding.DecodeString(obj.KMSWrappedDEK)
+		if err != nil {
+			return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+		}
+
+		MasterWrappedDEK, err := base64.StdEncoding.DecodeString(obj.MasterWrappedDEK)
+		if err != nil {
+			return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+		}
+
+		DEKNonce, err := base64.StdEncoding.DecodeString(obj.DEKNonce)
+		if err != nil {
+			return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+		}
+
+		// Build and return the result
+		results = append(results, GetObjectResult{
+			ObjectID:         obj.ObjectID,
+			EncryptedObj:     encryptedObj,
+			KMSWrappedDEK:    KMSWrappedDEK,
+			MasterWrappedDEK: MasterWrappedDEK,
+			DEKNonce:         DEKNonce,
+			CreatedAt:        obj.CreatedAt,
+			UpdatedAt:        obj.UpdatedAt,
+		})
+	}
+
+	return results, nil
 }

@@ -132,18 +132,32 @@ func (ec *EnclaveClient) GenerateDEK(ctx context.Context, count int) ([]crypto.G
 	return ec.ess.GenerateDEK(ctx, count)
 }
 
-func (ec *EnclaveClient) DecryptDEK(ctx context.Context, objectID string, encryptedDEKB64 string) ([]byte, error) {
+type DecryptDEKObject struct {
+	ObjectID string
+	DEKB64   string
+}
+
+type DecryptDEKResult struct {
+	ObjectID string
+	DEK      []byte
+	Error    error
+}
+
+func (ec *EnclaveClient) DecryptDEKs(ctx context.Context, dekObj []DecryptDEKObject) ([]DecryptDEKResult, error) {
 	if err := ec.ensureSession(ctx); err != nil {
 		return nil, fmt.Errorf("%w: %w", errors.ErrSession, err)
 	}
 	ec.essMu.RLock()
 	defer ec.essMu.RUnlock()
 
-	item := enclaveproto.SessionUnwrapItem{
-		ObjectId:   objectID,
-		Ciphertext: encryptedDEKB64,
+	items := make([]enclaveproto.SessionUnwrapItem, len(dekObj))
+	for i, obj := range dekObj {
+		item := enclaveproto.SessionUnwrapItem{
+			ObjectId:   obj.ObjectID,
+			Ciphertext: obj.DEKB64,
+		}
+		items[i] = item
 	}
-	items := []enclaveproto.SessionUnwrapItem{item}
 
 	res, err := ec.ess.SessionUnwrap(ctx, items)
 	if err != nil {
@@ -153,11 +167,21 @@ func (ec *EnclaveClient) DecryptDEK(ctx context.Context, objectID string, encryp
 		return nil, fmt.Errorf("%w: %s", errors.ErrEncryption, res[0].Error)
 	}
 
-	dek, err := ec.ess.UnsealDEK(ctx, res[0].SealedDEK, res[0].Nonce, objectID)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to unseal DEK: %v", errors.ErrEncryption, err)
+	results := make([]DecryptDEKResult, len(res))
+
+	for i, dek := range res {
+		dek, err := ec.ess.UnsealDEK(ctx, dek.SealedDEK, dek.Nonce, dekObj[i].ObjectID)
+		results[i] = DecryptDEKResult{
+			ObjectID: dekObj[i].ObjectID,
+			DEK:      dek,
+			Error:    err,
+		}
+		if err != nil {
+			results[i].Error = fmt.Errorf("%w: failed to unseal DEK for object %s: %v", errors.ErrEncryption, dekObj[i].ObjectID, err)
+		}
 	}
-	return dek, nil
+
+	return results, nil
 }
 
 func (ec *EnclaveClient) GetTableHash(ctx context.Context, tableName string) (string, error) {
