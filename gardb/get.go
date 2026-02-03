@@ -54,7 +54,12 @@ func (s *Schema) Get(ctx context.Context, id string, obj any) error {
 	}
 
 	// Decrypt DEK
-	ptDEK, err := s.client.enclaveClient.DecryptDEK(ctx, id, base64.StdEncoding.EncodeToString(data.KMSWrappedDEK))
+	ptDEK, err := s.client.enclaveClient.DecryptDEKs(ctx, []internal.DecryptDEKObject{
+		{
+			ObjectID: id,
+			DEKB64:   base64.StdEncoding.EncodeToString(data.KMSWrappedDEK),
+		},
+	})
 	if err != nil {
 		if internal.IsContextError(err) {
 			return &errors.Error{
@@ -69,7 +74,7 @@ func (s *Schema) Get(ctx context.Context, id string, obj any) error {
 	}
 
 	// Decrypt object
-	decryptedObjBytes, err := crypto.DecryptObjectProbabilistic(data.EncryptedObj, ptDEK)
+	decryptedObjBytes, err := crypto.DecryptObjectProbabilistic(data.EncryptedObj, ptDEK[0].DEK)
 	if err != nil {
 		if internal.IsContextError(err) {
 			return &errors.Error{

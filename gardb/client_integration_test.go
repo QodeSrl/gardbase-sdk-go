@@ -120,4 +120,18 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 
 		t.Logf("Successfully retrieved book: %+v", retrievedBook)
 	})
+
+	t.Run("scan table", func(t *testing.T) {
+		var books []Book
+		t.Log("Scanning book table from Gardb...")
+		if err := bookSchema.Scan(ctx, &books); err != nil {
+			t.Fatalf("Failed to scan books: %v", err)
+		}
+
+		if len(books) == 0 {
+			t.Fatalf("Expected at least one book in scan results")
+		}
+
+		t.Logf("Successfully scanned books: %+v", books)
+	})
 }
