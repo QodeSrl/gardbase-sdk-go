@@ -157,35 +157,46 @@ func (c *APIClient) Get(ctx context.Context, tableHash string, id string) (GetOb
 		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 	}
 
-	// Download the encrypted object from S3
-	req, err = http.NewRequestWithContext(ctx, "GET", respBody.GetURL, nil)
-	if err != nil {
-		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
-	}
-	req.Header.Set("Content-Type", "application/octet-stream")
-	resp, err = c.httpClient.Do(req)
-	if err != nil {
-		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusNotFound {
-			return GetObjectResult{}, fmt.Errorf("%w: object with ID %s not found in S3", errors.ErrNotFound, id)
+	var encryptedObj []byte
+
+	if respBody.GetURL != "" {
+		// Download the encrypted object from S3
+		req, err = http.NewRequestWithContext(ctx, "GET", respBody.GetURL, nil)
+		if err != nil {
+			return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
 		}
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return GetObjectResult{}, fmt.Errorf("%w: unauthorized access to object with ID %s in S3", errors.ErrUnauthorized, id)
+		req.Header.Set("Content-Type", "application/octet-stream")
+		resp, err = c.httpClient.Do(req)
+		if err != nil {
+			return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 		}
-		if resp.StatusCode == http.StatusTooManyRequests {
-			return GetObjectResult{}, fmt.Errorf("%w: rate limit exceeded when accessing object with ID %s in S3", errors.ErrRateLimited, id)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			if resp.StatusCode == http.StatusNotFound {
+				return GetObjectResult{}, fmt.Errorf("%w: object with ID %s not found in S3", errors.ErrNotFound, id)
+			}
+			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+				return GetObjectResult{}, fmt.Errorf("%w: unauthorized access to object with ID %s in S3", errors.ErrUnauthorized, id)
+			}
+			if resp.StatusCode == http.StatusTooManyRequests {
+				return GetObjectResult{}, fmt.Errorf("%w: rate limit exceeded when accessing object with ID %s in S3", errors.ErrRateLimited, id)
+			}
+			return GetObjectResult{}, fmt.Errorf("%w: failed to get object from S3, status code: %d", errors.ErrNetwork, resp.StatusCode)
 		}
-		return GetObjectResult{}, fmt.Errorf("%w: failed to get object from S3, status code: %d", errors.ErrNetwork, resp.StatusCode)
+
+		buf := new(bytes.Buffer)
+		_, err = buf.ReadFrom(resp.Body)
+		if err != nil {
+			return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+		}
+		encryptedObj = buf.Bytes()
+	} else {
+		encryptedObj, err = base64.StdEncoding.DecodeString(respBody.EncryptedBlob)
+		if err != nil {
+			return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+		}
 	}
 
-	buf := new(bytes.Buffer)
-	_, err = buf.ReadFrom(resp.Body)
-	if err != nil {
-		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
-	}
 	KMSWrappedDEK, err := base64.StdEncoding.DecodeString(respBody.KMSWrappedDEK)
 	if err != nil {
 		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
@@ -203,7 +214,7 @@ func (c *APIClient) Get(ctx context.Context, tableHash string, id string) (GetOb
 
 	// Build and return the result
 	return GetObjectResult{
-		EncryptedObj:     buf.Bytes(),
+		EncryptedObj:     encryptedObj,
 		KMSWrappedDEK:    KMSWrappedDEK,
 		MasterWrappedDEK: MasterWrappedDEK,
 		DEKNonce:         DEKNonce,
