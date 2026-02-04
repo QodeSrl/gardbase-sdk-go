@@ -212,7 +212,7 @@ func (ec *EnclaveClient) GetTableHash(ctx context.Context, tableName string) (st
 		return "", fmt.Errorf("%w: failed to marshal request body: %v", errors.ErrValidation, err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", ec.APIEndpoint+"/objects/table-hash", bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", ec.APIEndpoint+"/objects/get-table-hash", bytes.NewReader(reqBody))
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to create request: %v", errors.ErrValidation, err)
 	}

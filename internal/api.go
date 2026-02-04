@@ -28,15 +28,15 @@ func NewAPIClient(apiEndpoint string, tenantID string, apiKey string, httpClient
 }
 
 // Put encrypts a JSON object and its indexed fields, creates a remote object record, and uploads the encrypted object payload.
-func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[string]any, dek crypto.GeneratedDEK, schemaName string, tableHash string) (objects.CreateObjectResponse, error) {
+func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[string]any, dek crypto.GeneratedDEK, schemaName string, tableHash string) (objects.PutObjectResponse, error) {
 	// Encrypt object with DEK
 	objBytes, err := json.Marshal(values)
 	if err != nil {
-		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
+		return objects.PutObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
 	}
 	encryptedObj, err := crypto.EncryptObjectProbabilistic(objBytes, dek.PlaintextDEK)
 	if err != nil {
-		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrEncryption, err)
+		return objects.PutObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrEncryption, err)
 	}
 
 	// Encrypt indexes with DEK
@@ -44,17 +44,18 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 	for k, v := range indexes {
 		indexBytes, err := json.Marshal(v)
 		if err != nil {
-			return objects.CreateObjectResponse{}, fmt.Errorf("%w: (index %s) %v", errors.ErrValidation, k, err)
+			return objects.PutObjectResponse{}, fmt.Errorf("%w: (index %s) %v", errors.ErrValidation, k, err)
 		}
 		context := fmt.Sprintf("%s:%s", schemaName, k)
 		encryptedIndex, err := crypto.EncryptObjectDeterministic(indexBytes, context, dek.PlaintextDEK)
 		if err != nil {
-			return objects.CreateObjectResponse{}, fmt.Errorf("%w: (index %s) %v", errors.ErrEncryption, k, err)
+			return objects.PutObjectResponse{}, fmt.Errorf("%w: (index %s) %v", errors.ErrEncryption, k, err)
 		}
 		encryptedIndexesB64[k] = base64.StdEncoding.EncodeToString(encryptedIndex)
 	}
 
-	reqBody, err := json.Marshal(objects.CreateObjectRequest{
+	reqBody, err := json.Marshal(objects.PutObjectRequest{
+		TableHash:          tableHash,
 		BlobSize:           int64(len(encryptedObj)),
 		KMSEncryptedDEK:    base64.StdEncoding.EncodeToString(dek.KMSEncryptedDEK),
 		MasterEncryptedDEK: base64.StdEncoding.EncodeToString(dek.MasterKeyEncryptedDEK),
@@ -63,55 +64,55 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 		Sensitivity:        "medium",
 	})
 	if err != nil {
-		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
+		return objects.PutObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
 	}
 
 	// Create remote object record
-	req, err := http.NewRequestWithContext(ctx, "POST", c.APIEndpoint+"/objects/"+tableHash, bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.APIEndpoint+"/objects/put", bytes.NewReader(reqBody))
 	if err != nil {
-		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
+		return objects.PutObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrNetwork, err)
+		return objects.PutObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrNetwork, err)
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return objects.CreateObjectResponse{}, fmt.Errorf("%w: unauthorized access when creating object", errors.ErrUnauthorized)
+			return objects.PutObjectResponse{}, fmt.Errorf("%w: unauthorized access when creating object", errors.ErrUnauthorized)
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
-			return objects.CreateObjectResponse{}, fmt.Errorf("%w: rate limit exceeded when creating object", errors.ErrRateLimited)
+			return objects.PutObjectResponse{}, fmt.Errorf("%w: rate limit exceeded when creating object", errors.ErrRateLimited)
 		}
-		return objects.CreateObjectResponse{}, fmt.Errorf("%w: failed to create object, status code: %d", errors.ErrNetwork, resp.StatusCode)
+		return objects.PutObjectResponse{}, fmt.Errorf("%w: failed to create object, status code: %d", errors.ErrNetwork, resp.StatusCode)
 	}
 	defer resp.Body.Close()
 
-	respBody := objects.CreateObjectResponse{}
+	respBody := objects.PutObjectResponse{}
 	err = json.NewDecoder(resp.Body).Decode(&respBody)
 	if err != nil {
-		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+		return objects.PutObjectResponse{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 	}
 
 	// Upload encrypted object
 	req, err = http.NewRequestWithContext(ctx, "PUT", respBody.UploadURL, bytes.NewReader(encryptedObj))
 	if err != nil {
-		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
+		return objects.PutObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 	resp, err = c.httpClient.Do(req)
 	if err != nil {
-		return objects.CreateObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrNetwork, err)
+		return objects.PutObjectResponse{}, fmt.Errorf("%w: %w", errors.ErrNetwork, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return objects.CreateObjectResponse{}, fmt.Errorf("%w: unauthorized access to upload URL", errors.ErrUnauthorized)
+			return objects.PutObjectResponse{}, fmt.Errorf("%w: unauthorized access to upload URL", errors.ErrUnauthorized)
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
-			return objects.CreateObjectResponse{}, fmt.Errorf("%w: rate limit exceeded when uploading encrypted object", errors.ErrRateLimited)
+			return objects.PutObjectResponse{}, fmt.Errorf("%w: rate limit exceeded when uploading encrypted object", errors.ErrRateLimited)
 		}
-		return objects.CreateObjectResponse{}, fmt.Errorf("%w: failed to upload encrypted object, status code: %d", errors.ErrNetwork, resp.StatusCode)
+		return objects.PutObjectResponse{}, fmt.Errorf("%w: failed to upload encrypted object, status code: %d", errors.ErrNetwork, resp.StatusCode)
 	}
 
 	return respBody, nil
@@ -129,8 +130,15 @@ type GetObjectResult struct {
 
 // Get retrieves an encrypted object by its ID and returns the encrypted payload.
 func (c *APIClient) Get(ctx context.Context, tableHash string, id string) (GetObjectResult, error) {
+	reqBody, err := json.Marshal(objects.GetObjectRequest{
+		TableHash: tableHash,
+		ObjectID:  id,
+	})
+	if err != nil {
+		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
+	}
 	// Call the API and get the object metadata and S3 URL
-	req, err := http.NewRequestWithContext(ctx, "GET", c.APIEndpoint+"/objects/"+tableHash+"/"+id, nil)
+	req, err := http.NewRequestWithContext(ctx, "POST", c.APIEndpoint+"/objects/get", bytes.NewReader(reqBody))
 	if err != nil {
 		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
 	}
@@ -237,7 +245,7 @@ func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextT
 	if err != nil {
 		return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
 	}
-	req, err := http.NewRequestWithContext(ctx, "POST", c.APIEndpoint+"/objects/"+tableHash+"/scan", bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.APIEndpoint+"/objects/scan", bytes.NewReader(reqBody))
 	if err != nil {
 		return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
 	}

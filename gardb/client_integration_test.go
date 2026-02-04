@@ -124,7 +124,11 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 	t.Run("scan table", func(t *testing.T) {
 		var books []Book
 		t.Log("Scanning book table from Gardb...")
-		if err := bookSchema.Scan(ctx, &books); err != nil {
+		scanInput := &gardb.ScanInput{
+			Limit:     10,
+			NextToken: nil,
+		}
+		if err := bookSchema.Scan(ctx, &books, scanInput); err != nil {
 			t.Fatalf("Failed to scan books: %v", err)
 		}
 

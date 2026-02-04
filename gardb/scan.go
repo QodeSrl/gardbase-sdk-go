@@ -12,12 +12,12 @@ import (
 	"github.com/QodeSrl/gardbase/pkg/crypto"
 )
 
-type ScanConfig struct {
+type ScanInput struct {
 	Limit     int
 	NextToken *string
 }
 
-func (s *Schema) Scan(ctx context.Context, obj any, config ScanConfig) error {
+func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) error {
 	const op = "Schema.Scan"
 
 	if !validatePtrToSliceOfStructsWithGardbMeta(obj) {
