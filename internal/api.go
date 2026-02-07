@@ -233,7 +233,10 @@ func (c *APIClient) Get(ctx context.Context, tableHash string, id string) (GetOb
 	}, nil
 }
 
-type ScanResult = []GetObjectResult
+type ScanResult struct {
+	NextToken *string
+	Results   []GetObjectResult
+}
 
 func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextToken *string) (ScanResult, error) {
 	// Call the API and get the list of objects
@@ -329,7 +332,7 @@ func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextT
 		}
 
 		// Build and return the result
-		results = append(results, GetObjectResult{
+		results.Results = append(results.Results, GetObjectResult{
 			ObjectID:         obj.ObjectID,
 			EncryptedObj:     encryptedObj,
 			KMSWrappedDEK:    KMSWrappedDEK,
@@ -338,6 +341,7 @@ func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextT
 			CreatedAt:        obj.CreatedAt,
 			UpdatedAt:        obj.UpdatedAt,
 		})
+		results.NextToken = respBody.NextToken
 	}
 
 	return results, nil

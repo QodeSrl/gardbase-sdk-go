@@ -17,11 +17,15 @@ type ScanInput struct {
 	NextToken *string
 }
 
-func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) error {
+type ScanOutput struct {
+	NextToken *string
+}
+
+func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) (*ScanOutput, error) {
 	const op = "Schema.Scan"
 
 	if !validatePtrToSliceOfStructsWithGardbMeta(obj) {
-		return &errors.Error{
+		return nil, &errors.Error{
 			Op:  op,
 			Err: fmt.Errorf("%w: expected pointer to struct with GardbMeta field", errors.ErrValidation),
 		}
@@ -30,19 +34,19 @@ func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) error {
 	data, err := s.client.apiClient.Scan(ctx, s.tableHash, config.Limit, config.NextToken)
 	if err != nil {
 		if internal.IsContextError(err) {
-			return &errors.Error{
+			return nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
 			}
 		}
-		return &errors.Error{
+		return nil, &errors.Error{
 			Op:  op,
 			Err: err,
 		}
 	}
 
-	dekObjs := make([]internal.DecryptDEKObject, len(data))
-	for i, item := range data {
+	dekObjs := make([]internal.DecryptDEKObject, len(data.Results))
+	for i, item := range data.Results {
 		dekObjs[i] = internal.DecryptDEKObject{
 			ObjectID: item.ObjectID,
 			DEKB64:   base64.StdEncoding.EncodeToString(item.KMSWrappedDEK),
@@ -51,12 +55,12 @@ func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) error {
 	deks, err := s.client.enclaveClient.DecryptDEKs(ctx, dekObjs)
 	if err != nil {
 		if internal.IsContextError(err) {
-			return &errors.Error{
+			return nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
 			}
 		}
-		return &errors.Error{
+		return nil, &errors.Error{
 			Op:  op,
 			Err: err,
 		}
@@ -66,7 +70,7 @@ func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) error {
 	sliceVal := slicePtr.Elem()
 	elemType := sliceVal.Type().Elem()
 
-	for i, item := range data {
+	for i, item := range data.Results {
 		if deks[i].Error != nil {
 			continue
 		}
@@ -74,12 +78,12 @@ func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) error {
 		decryptedObjBytes, err := crypto.DecryptObjectProbabilistic(item.EncryptedObj, deks[i].DEK)
 		if err != nil {
 			if internal.IsContextError(err) {
-				return &errors.Error{
+				return nil, &errors.Error{
 					Op:  op,
 					Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
 				}
 			}
-			return &errors.Error{
+			return nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: failed to decrypt object: %v", errors.ErrEncryption, err),
 			}
@@ -88,7 +92,7 @@ func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) error {
 		elemPtr := reflect.New(elemType)
 
 		if err = json.Unmarshal(decryptedObjBytes, elemPtr.Interface()); err != nil {
-			return &errors.Error{
+			return nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: failed to unmarshal object: %v", errors.ErrEncryption, err),
 			}
@@ -98,7 +102,7 @@ func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) error {
 		elemVal := elemPtr.Elem()
 		metaField := elemVal.FieldByName("GardbMeta")
 		if !metaField.IsValid() {
-			return &errors.Error{
+			return nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: GardbMeta field not found", errors.ErrValidation),
 			}
@@ -115,5 +119,7 @@ func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) error {
 		sliceVal.Set(reflect.Append(sliceVal, elemVal))
 	}
 
-	return nil
+	return &ScanOutput{
+		NextToken: data.NextToken,
+	}, nil
 }
