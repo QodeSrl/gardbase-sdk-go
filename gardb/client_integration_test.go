@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb"
 	"github.com/QodeSrl/gardbase-sdk-go/schema"
@@ -219,6 +220,72 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 		}
 
 		t.Logf("Successfully scanned %d books (limited to 2)", len(books))
+	})
+
+	// Scan all objects with pagination
+	t.Run("06_scan_all_with_pagination", func(t *testing.T) {
+		t.Log("Scanning all books with pagination...")
+
+		var allBooks []Book
+		var nextToken *string
+
+		for {
+			var books []Book
+			scanInput := &gardb.ScanInput{
+				Limit:     2,
+				NextToken: nextToken,
+			}
+
+			scanOutput, err := bookSchema.Scan(ctx, &books, scanInput)
+			if err != nil {
+				t.Fatalf("Failed to scan books: %v", err)
+			}
+
+			allBooks = append(allBooks, books...)
+
+			if scanOutput.NextToken == nil {
+				break
+			}
+			nextToken = scanOutput.NextToken
+		}
+
+		if len(allBooks) != len(bookIds) {
+			t.Fatalf("Expected to scan %d books, got %d", len(bookIds), len(allBooks))
+		}
+
+		t.Logf("Successfully scanned all books with pagination: %d books", len(allBooks))
+	})
+
+	// Scan empty table
+	t.Run("07_scan_empty_table", func(t *testing.T) {
+		t.Log("Scanning empty table...")
+
+		emptySchema, err := client.Schema(ctx, "empty_table", gardb.Model{
+			"field": schema.String().Required(),
+		})
+		if err != nil {
+			t.Fatalf("Failed to create empty table schema: %v", err)
+		}
+
+		type EmptyRecord struct {
+			gardb.GardbMeta
+			Field string `gardb:"field"`
+		}
+
+		var results []EmptyRecord
+		scanInput := &gardb.ScanInput{
+			Limit: 10,
+		}
+
+		if err := emptySchema.Scan(ctx, &results, scanInput); err != nil {
+			t.Fatalf("Failed to scan empty table: %v", err)
+		}
+
+		if len(results) != 0 {
+			t.Fatalf("Expected 0 records from empty table scan, got %d", len(results))
+		}
+
+		t.Log("Successfully scanned empty table with 0 results")
 	})
 
 		scanInput := &gardb.ScanInput{
