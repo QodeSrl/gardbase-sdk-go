@@ -288,6 +288,56 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 		t.Log("Successfully scanned empty table with 0 results")
 	})
 
+	t.Run("08_update_object", func(t *testing.T) {
+		t.Log("Updating book object...")
+
+		var book Book
+		if err := bookSchema.Get(ctx, bookIds[0], &book); err != nil {
+			t.Fatalf("Failed to get book for update: %v", err)
+		}
+
+		book.InStock = false
+		book.Pages = 400
+
+		if err := bookSchema.Put(ctx, &book); err != nil {
+			t.Fatalf("Failed to update book: %v", err)
+		}
+
+		var updatedBook Book
+		if err := bookSchema.Get(ctx, bookIds[0], &updatedBook); err != nil {
+			t.Fatalf("Failed to get updated book: %v", err)
+		}
+
+		if updatedBook.InStock {
+			t.Error("Expected book to be out of stock after update")
+		}
+		if updatedBook.Pages != 400 {
+			t.Errorf("Expected 400 pages after update, got %d", updatedBook.Pages)
+		}
+
+		t.Logf("Successfully updated book: %+v", updatedBook)
+	})
+
+	t.Run("09_delete_object", func(t *testing.T) {
+		t.Log("Deleting book object...")
+
+		if err := bookSchema.Delete(ctx, bookIds[0]); err != nil {
+			t.Fatalf("Failed to delete book: %v", err)
+		}
+
+		var deleted Book
+		err := bookSchema.Get(ctx, bookIds[0], &deleted)
+		if err == nil {
+			t.Fatalf("Expected error when getting deleted book, got none")
+		}
+
+		t.Log("Successfully deleted book and verified it cannot be retrieved")
+	})
+
+	// Verify deletion via scan
+	t.Run("10_verify_deletion_via_scan", func(t *testing.T) {
+		t.Log("Verifying deletion via scan...")
+		var books []Book
 		scanInput := &gardb.ScanInput{
 			Limit:     10,
 			NextToken: nil,
@@ -295,11 +345,84 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 		if err := bookSchema.Scan(ctx, &books, scanInput); err != nil {
 			t.Fatalf("Failed to scan books: %v", err)
 		}
+		for _, b := range books {
+			if b.GardbMeta.ID == bookIds[0] {
+				t.Fatalf("Deleted book with ID %s still found in scan results", bookIds[0])
+			}
+		}
+		t.Log("Deleted book not found in scan results, deletion verified")
+	})
 
-		if len(books) == 0 {
-			t.Fatalf("Expected at least one book in scan results")
+	// Large object
+	t.Run("11_large_object", func(t *testing.T) {
+		t.Skip("Skipping large object test to avoid long execution time in CI")
+	})
+
+	// Concurrent operations
+	t.Run("12_concurrent_operations", func(t *testing.T) {
+		t.Log("Testing concurrent PUT operations...")
+
+		// Create 10 books concurrently
+		const concurrency = 10
+		errChan := make(chan error, concurrency)
+
+		for i := 0; i < concurrency; i++ {
+			go func(idx int) {
+				book := Book{
+					Name:        "Concurrent Book " + string(rune('A'+idx)),
+					Author:      "Test Author",
+					Pages:       300,
+					PublishedAt: time.Now(),
+					ISBN:        "978-0000000000",
+					InStock:     true,
+				}
+				errChan <- bookSchema.Put(ctx, &book)
+			}(i)
 		}
 
-		t.Logf("Successfully scanned books: %+v", books)
+		// Collect errors
+		for i := 0; i < concurrency; i++ {
+			if err := <-errChan; err != nil {
+				t.Errorf("Concurrent PUT %d failed: %v", i, err)
+			}
+		}
+
+		t.Logf("%d concurrent PUTs completed", concurrency)
+	})
+
+	// invalid operations
+	t.Run("13_error_handling", func(t *testing.T) {
+		t.Log("Testing error handling...")
+
+		// Get non-existent object
+		var book Book
+		err := bookSchema.Get(ctx, "non-existent-id", &book)
+		if err == nil {
+			t.Error("Expected error when getting non-existent object")
+		}
+		t.Log("Get non-existent object returned error")
+
+		// Delete non-existent object
+		err = bookSchema.Delete(ctx, "non-existent-id")
+		if err == nil {
+			t.Error("Expected error when deleting non-existent object")
+		}
+		t.Log("Delete non-existent object returned error")
+
+		// Put with missing required field
+		type InvalidBook struct {
+			gardb.GardbMeta
+			Name string `gardb:"name"` // Missing required 'author' field
+		}
+		invalidSchema, _ := client.Schema(ctx, "invalid_book", gardb.Model{
+			"name":   schema.String().Required(),
+			"author": schema.String().Required(),
+		})
+		invalidBook := InvalidBook{Name: "Test"}
+		err = invalidSchema.Put(ctx, &invalidBook)
+		if err == nil {
+			t.Error("Expected error when putting object with missing required fields")
+		}
+		t.Log("Put with missing required field returned error")
 	})
 }
