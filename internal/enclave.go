@@ -122,6 +122,10 @@ func (ec *EnclaveClient) GetSessionInfo(ctx context.Context) *SessionInfo {
 }
 
 func (ec *EnclaveClient) GenerateDEK(ctx context.Context, count int) ([]crypto.GeneratedDEK, error) {
+	if count <= 0 {
+		return nil, fmt.Errorf("%w: count must be greater than 0", errors.ErrValidation)
+	}
+
 	if err := ec.ensureSession(ctx); err != nil {
 		return nil, err
 	}
@@ -144,6 +148,10 @@ type DecryptDEKResult struct {
 }
 
 func (ec *EnclaveClient) DecryptDEKs(ctx context.Context, dekObj []DecryptDEKObject) ([]DecryptDEKResult, error) {
+	if len(dekObj) == 0 {
+		return nil, nil
+	}
+
 	if err := ec.ensureSession(ctx); err != nil {
 		return nil, fmt.Errorf("%w: %w", errors.ErrSession, err)
 	}
@@ -163,13 +171,13 @@ func (ec *EnclaveClient) DecryptDEKs(ctx context.Context, dekObj []DecryptDEKObj
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errors.ErrEncryption, err)
 	}
-	if res[0].Error != "" {
-		return nil, fmt.Errorf("%w: %s", errors.ErrEncryption, res[0].Error)
-	}
 
 	results := make([]DecryptDEKResult, len(res))
 
 	for i, dek := range res {
+		if res[i].Error != "" {
+			return nil, fmt.Errorf("%w: %s", errors.ErrEncryption, res[i].Error)
+		}
 		dek, err := ec.ess.UnsealDEK(ctx, dek.SealedDEK, dek.Nonce, dekObj[i].ObjectID)
 		results[i] = DecryptDEKResult{
 			ObjectID: dekObj[i].ObjectID,
