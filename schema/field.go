@@ -2,6 +2,7 @@ package schema
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 )
@@ -19,7 +20,7 @@ const (
 
 type Field struct {
 	Name          string
-	typ           FieldType
+	Typ           FieldType
 	TypeValidator func(any) bool
 	defaultValue  any
 	required      bool
@@ -28,7 +29,7 @@ type Field struct {
 
 func String() *Field {
 	return &Field{
-		typ: StringType,
+		Typ: StringType,
 		TypeValidator: func(val any) bool {
 			_, ok := val.(string)
 			return ok
@@ -38,7 +39,7 @@ func String() *Field {
 
 func Int() *Field {
 	return &Field{
-		typ: IntegerType,
+		Typ: IntegerType,
 		TypeValidator: func(val any) bool {
 			rv := reflect.ValueOf(val)
 			return rv.Kind() >= reflect.Int && rv.Kind() <= reflect.Int64
@@ -48,7 +49,7 @@ func Int() *Field {
 
 func Bool() *Field {
 	return &Field{
-		typ: BooleanType,
+		Typ: BooleanType,
 		TypeValidator: func(val any) bool {
 			_, ok := val.(bool)
 			return ok
@@ -58,7 +59,7 @@ func Bool() *Field {
 
 func Float() *Field {
 	return &Field{
-		typ: FloatType,
+		Typ: FloatType,
 		TypeValidator: func(val any) bool {
 			rv := reflect.ValueOf(val)
 			return rv.Kind() == reflect.Float32 || rv.Kind() == reflect.Float64
@@ -68,7 +69,7 @@ func Float() *Field {
 
 func JSON() *Field {
 	return &Field{
-		typ: JSONType,
+		Typ: JSONType,
 		TypeValidator: func(val any) bool {
 			_, ok := val.(map[string]any)
 			return ok
@@ -78,9 +79,9 @@ func JSON() *Field {
 
 func Time() *Field {
 	return &Field{
-		typ: TimeType,
+		Typ: TimeType,
 		TypeValidator: func(val any) bool {
-			_, ok := val.(int64)
+			_, ok := val.(time.Time)
 			return ok
 		},
 	}
@@ -109,7 +110,17 @@ func (f *Field) IsRequired() bool {
 }
 
 func (f *Field) ExtractIntoValuesIndexes(val reflect.Value, values *map[string]any, indexes *map[string]any, valErrors *errors.ValidationErrors, tag string) {
-	if val.IsZero() {
+	isEmpty := false
+	switch val.Kind() {
+	case reflect.Bool:
+		isEmpty = false
+	case reflect.Ptr, reflect.Interface:
+		isEmpty = val.IsNil()
+	default:
+		isEmpty = val.IsZero()
+	}
+
+	if isEmpty {
 		if f.defaultValue != nil {
 			(*values)[tag] = f.defaultValue
 		} else if f.required {
@@ -123,9 +134,18 @@ func (f *Field) ExtractIntoValuesIndexes(val reflect.Value, values *map[string]a
 			valErrors.Add(tag, "invalid type", val.Interface())
 			return
 		}
-		(*values)[tag] = val.Interface()
-		if f.searchable {
-			(*indexes)[tag] = val.Interface()
+		if f.Typ == TimeType {
+			t := val.Interface().(time.Time)
+			unix := t.Unix()
+			(*values)[tag] = unix
+			if f.searchable {
+				(*indexes)[tag] = unix
+			}
+		} else {
+			(*values)[tag] = val.Interface()
+			if f.searchable {
+				(*indexes)[tag] = val.Interface()
+			}
 		}
 	}
 }

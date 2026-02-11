@@ -211,7 +211,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 			NextToken: nil,
 		}
 
-		if err := bookSchema.Scan(ctx, &books, scanInput); err != nil {
+		if _, err := bookSchema.Scan(ctx, &books, scanInput); err != nil {
 			t.Fatalf("Failed to scan books: %v", err)
 		}
 
@@ -277,7 +277,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 			Limit: 10,
 		}
 
-		if err := emptySchema.Scan(ctx, &results, scanInput); err != nil {
+		if _, err := emptySchema.Scan(ctx, &results, scanInput); err != nil {
 			t.Fatalf("Failed to scan empty table: %v", err)
 		}
 
@@ -342,7 +342,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 			Limit:     10,
 			NextToken: nil,
 		}
-		if err := bookSchema.Scan(ctx, &books, scanInput); err != nil {
+		if _, err := bookSchema.Scan(ctx, &books, scanInput); err != nil {
 			t.Fatalf("Failed to scan books: %v", err)
 		}
 		for _, b := range books {

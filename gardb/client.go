@@ -163,6 +163,8 @@ func (c *Client) Schema(ctx context.Context, name string, model Model) (*Schema,
 	}
 
 	fields := make(map[string]*schema.Field, len(model))
+	timeFields := make([]string, 0)
+
 	for fieldName, field := range model {
 		if fieldName == "" {
 			return nil, &errors.Error{
@@ -172,6 +174,10 @@ func (c *Client) Schema(ctx context.Context, name string, model Model) (*Schema,
 		}
 		field.Name = fieldName
 		fields[fieldName] = field
+
+		if field.Typ == schema.TimeType {
+			timeFields = append(timeFields, fieldName)
+		}
 	}
 
 	tableHash, ok := c.cache.Get("tablehash__" + name)
@@ -185,10 +191,11 @@ func (c *Client) Schema(ctx context.Context, name string, model Model) (*Schema,
 	}
 
 	s := &Schema{
-		name:      name,
-		tableHash: tableHash.(string),
-		fields:    fields,
-		client:    c,
+		name:       name,
+		tableHash:  tableHash.(string),
+		fields:     fields,
+		timeFields: timeFields,
+		client:     c,
 	}
 
 	return s, nil

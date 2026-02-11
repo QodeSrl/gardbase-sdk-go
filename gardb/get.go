@@ -88,10 +88,17 @@ func (s *Schema) Get(ctx context.Context, id string, obj any) error {
 		}
 	}
 
-	if err = json.Unmarshal(decryptedObjBytes, obj); err != nil {
+	var raw map[string]any
+	if err = json.Unmarshal(decryptedObjBytes, &raw); err != nil {
 		return &errors.Error{
 			Op:  op,
 			Err: fmt.Errorf("%w: failed to unmarshal object: %v", errors.ErrEncryption, err),
+		}
+	}
+	if err = s.populate(obj, raw); err != nil {
+		return &errors.Error{
+			Op:  op,
+			Err: err,
 		}
 	}
 

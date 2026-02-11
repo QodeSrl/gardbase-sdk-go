@@ -91,10 +91,17 @@ func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) (*ScanOut
 
 		elemPtr := reflect.New(elemType)
 
-		if err = json.Unmarshal(decryptedObjBytes, elemPtr.Interface()); err != nil {
+		var raw map[string]any
+		if err = json.Unmarshal(decryptedObjBytes, &raw); err != nil {
 			return nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: failed to unmarshal object: %v", errors.ErrEncryption, err),
+			}
+		}
+		if err = s.populate(elemPtr.Interface(), raw); err != nil {
+			return nil, &errors.Error{
+				Op:  op,
+				Err: err,
 			}
 		}
 
