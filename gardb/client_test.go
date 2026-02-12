@@ -134,13 +134,17 @@ func TestSchema_ValidationErrors(t *testing.T) {
 	}
 	c, err := NewClient(cfg)
 	ctx := context.Background()
+	type Obj struct {
+		GardbBase
+		F string `gardb:"f"`
+	}
 	// Empty name
-	_, err = c.Schema(ctx, "", Model{"f": schema.String()})
+	_, err = Schema[*Obj](ctx, c, "", Model{"f": schema.String()})
 	if err == nil {
 		t.Fatalf("expected error for empty schema name")
 	}
 	// Empty model
-	_, err = c.Schema(ctx, "users", Model{})
+	_, err = Schema[*Obj](ctx, c, "users", Model{})
 	if err == nil {
 		t.Fatalf("expected error for empty schema model")
 	}

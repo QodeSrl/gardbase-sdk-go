@@ -9,7 +9,7 @@ import (
 	"github.com/QodeSrl/gardbase-sdk-go/schema"
 )
 
-type Schema struct {
+type gardbSchema[T GardbObject] struct {
 	name       string
 	tableHash  string
 	fields     Model
@@ -17,69 +17,35 @@ type Schema struct {
 	client     *Client
 }
 
+type GardbObject interface {
+	getGardbMeta() *GardbMeta
+}
+
+type GardbBase struct {
+	GardbMeta
+}
+
+func (g *GardbBase) getGardbMeta() *GardbMeta {
+	return &g.GardbMeta
+}
+
 type GardbMeta struct {
-	schema    *Schema
 	ID        string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-func (m *GardbMeta) Schema() *Schema {
-	return m.schema
-}
-
-func validatePtrToStructWithGardbMeta(obj any) bool {
-	rv := reflect.ValueOf(obj)
-	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Struct {
-		return false
-	}
-	rv = rv.Elem()
-	field := rv.FieldByName("GardbMeta")
-	if !field.IsValid() {
-		return false
-	}
-	if field.Type() != reflect.TypeOf(GardbMeta{}) {
-		return false
-	}
-	return true
-}
-
-func validatePtrToSliceOfStructsWithGardbMeta(obj any) bool {
-	rv := reflect.ValueOf(obj)
-	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Slice {
-		return false
-	}
-	rv = rv.Elem()
-	elemType := rv.Type().Elem()
-	if elemType.Kind() != reflect.Struct {
-		return false
-	}
-	field, ok := elemType.FieldByName("GardbMeta")
-	if !ok || field.Type != reflect.TypeOf(GardbMeta{}) {
-		return false
-	}
-	return true
-}
-
 type Model map[string]*schema.Field // schema.String(), schema.Int(), etc.
 
 // Name returns the name of the schema
-func (s *Schema) Name() string {
+func (s *gardbSchema[T]) Name() string {
 	return s.name
 }
 
-// New validates the given struct against the schema and initializes GardbMeta
-func (s *Schema) new(op string, ptr any) error {
-	rv := reflect.ValueOf(ptr).Elem()
+// validate checks if the given struct pointer conforms to the schema definition (field names, types, required fields)
+func (s *gardbSchema[T]) validate(op string, obj T) error {
+	rv := reflect.ValueOf(obj).Elem()
 	rt := rv.Type()
-
-	field := rv.FieldByName("GardbMeta")
-	if !field.IsValid() {
-		return errors.Errorf(op, nil, "struct must have a GardbMeta field of type GardbMeta")
-	}
-	if field.Type() != reflect.TypeOf(GardbMeta{}) {
-		return errors.Errorf(op, nil, "struct must have a GardbMeta field of type GardbMeta")
-	}
 
 	structTags := make(map[string]bool)
 
@@ -122,27 +88,18 @@ func (s *Schema) new(op string, ptr any) error {
 		}
 	}
 
-	// Add GardbMeta to the struct
-	metaField := reflect.ValueOf(ptr).Elem().FieldByName("GardbMeta")
-	if metaField.IsValid() && metaField.CanSet() {
-		meta := GardbMeta{
-			schema: s,
-		}
-		metaField.Set(reflect.ValueOf(meta))
-	}
-
 	return nil
 }
 
-// Extract extracts the values and indexes from the given struct pointer according to the schema
-func (s *Schema) extract(ptr any) (values map[string]any, indexes map[string]any, err error) {
+// extract takes a struct pointer and extracts field values into a values map and an indexes map, applying default values and checking required fields
+func (s *gardbSchema[T]) extract(obj T) (values map[string]any, indexes map[string]any, err error) {
 	const op = "Schema.Extract"
 	valErrors := &errors.ValidationErrors{Op: op}
 
 	values = make(map[string]any, len(s.fields))
 	indexes = make(map[string]any)
 
-	rv := reflect.ValueOf(ptr).Elem()
+	rv := reflect.ValueOf(obj).Elem()
 	rt := rv.Type()
 
 	for i := 0; i < rt.NumField(); i++ {
@@ -161,9 +118,10 @@ func (s *Schema) extract(ptr any) (values map[string]any, indexes map[string]any
 	return values, indexes, nil
 }
 
-func (s *Schema) populate(ptr any, raw map[string]any) error {
+// populate takes a struct pointer and populates its fields from the given raw map, converting types as needed (e.g. time fields)
+func (s *gardbSchema[T]) populate(obj T, raw map[string]any) error {
 	const op = "Schema.populate"
-	rv := reflect.ValueOf(ptr).Elem()
+	rv := reflect.ValueOf(obj).Elem()
 	rt := rv.Type()
 
 	for i := 0; i < rt.NumField(); i++ {

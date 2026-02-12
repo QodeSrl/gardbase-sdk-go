@@ -3,29 +3,25 @@ package gardb
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 	"github.com/QodeSrl/gardbase-sdk-go/internal"
 )
 
-// Put validates and persists obj to Gardb.
+// Put stores an object in the GardBase database.
 //
-// Put expects obj to be a pointer to a struct that contains a GardbMeta field.
-// Put validates obj against the schema associated with the Schema instance, extracts its values and indexes,
-// generates a data encryption key (DEK) using the enclave client, and calls the API client's Put method
-// to handle encryption and upload of the object.
-//
-// On success, Put updates the CreatedAt and UpdatedAt fields in the GardbMeta of obj with the timestamps returned by the server,
-// and sets the ID field with the object ID returned by the server.
+// It validates the object against the schema, extracts values and indexes,
+// generates a Data Encryption Key (DEK) from the enclave, and uploads the
+// encrypted data to the database. Upon success, it updates the object's
+// metadata with the assigned ID and timestamps.
 //
 // Parameters:
-//   - ctx: context for API and enclave operations.
-//   - obj: object (pointer to struct) to validate and persist.
+//   - ctx: The context for managing request cancellation and timeout
+//   - obj: The object to be stored, which must implement the GardbObject interface
 //
-// Returns an error if the provided obj is invalid (ErrInvalidSchema), if validation fails, if the API call fails,
-// or if DEK generation fails (returns ErrSession for DEK generation failures).
-func (s *Schema) Put(ctx context.Context, obj any) error {
+// Returns:
+//   - An error if any step of the validation, encryption, or upload process fails, or if the context is cancelled/times out
+func (s *gardbSchema[T]) Put(ctx context.Context, obj T) error {
 	const op = "Schema.Put"
 
 	if err := ctx.Err(); err != nil {
@@ -35,17 +31,8 @@ func (s *Schema) Put(ctx context.Context, obj any) error {
 		}
 	}
 
-	// Validate that obj is a pointer to a struct
-	rv := reflect.ValueOf(obj)
-	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Struct {
-		return &errors.Error{
-			Op:  op,
-			Err: fmt.Errorf("%w: expected pointer to struct, got %T", errors.ErrInvalidSchema, obj),
-		}
-	}
-
 	// Validate obj against the schema and initialize GardbMeta
-	if err := s.new(op, obj); err != nil {
+	if err := s.validate(op, obj); err != nil {
 		return err
 	}
 
@@ -92,18 +79,13 @@ func (s *Schema) Put(ctx context.Context, obj any) error {
 		}
 	}
 
-	metaField := reflect.ValueOf(obj).Elem().FieldByName("GardbMeta")
-	// Update CreatedAt and UpdatedAt fields in the original object
-	if metaField.IsValid() && metaField.CanSet() {
-		meta := metaField.Interface().(GardbMeta)
-		// Update ID
-		meta.ID = respBody.ObjectID
-		// Update timestamps
-		meta.CreatedAt = respBody.CreatedAt
-		meta.UpdatedAt = respBody.CreatedAt
+	meta := obj.getGardbMeta()
 
-		metaField.Set(reflect.ValueOf(meta))
-	}
+	// Update ID
+	meta.ID = respBody.ObjectID
+	// Update timestamps
+	meta.CreatedAt = respBody.CreatedAt
+	meta.UpdatedAt = respBody.CreatedAt
 
 	return nil
 }

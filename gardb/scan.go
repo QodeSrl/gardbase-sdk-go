@@ -21,25 +21,33 @@ type ScanOutput struct {
 	NextToken *string
 }
 
-func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) (*ScanOutput, error) {
+// Scan retrieves a list of decrypted objects from the database based on the provided scan configuration.
+//
+// It performs a scan operation using the API client to fetch encrypted object payloads, decrypts the Data Encryption Keys (DEKs)
+// through the enclave client, decrypts each object using the corresponding plaintext DEK, and unmarshals the results
+// into a slice of the specified type T. Each object's metadata (ID, CreatedAt, UpdatedAt) is populated from the
+// retrieved data.
+//
+// Parameters:
+//   - ctx: The context for managing request cancellation and timeout
+//   - config: The configuration for the scan operation, including limit and pagination token
+//
+// Returns:
+//   - A slice of objects of type T containing the decrypted and unmarshalled data
+//   - A ScanOutput containing the next pagination token if more results are available
+//   - An error if any step of the retrieval, decryption, or unmarshalling process fails, or if the context is cancelled/times out
+func (s *gardbSchema[T]) Scan(ctx context.Context, config *ScanInput) ([]T, *ScanOutput, error) {
 	const op = "Schema.Scan"
-
-	if !validatePtrToSliceOfStructsWithGardbMeta(obj) {
-		return nil, &errors.Error{
-			Op:  op,
-			Err: fmt.Errorf("%w: expected pointer to struct with GardbMeta field", errors.ErrValidation),
-		}
-	}
 
 	data, err := s.client.apiClient.Scan(ctx, s.tableHash, config.Limit, config.NextToken)
 	if err != nil {
 		if internal.IsContextError(err) {
-			return nil, &errors.Error{
+			return nil, nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
 			}
 		}
-		return nil, &errors.Error{
+		return nil, nil, &errors.Error{
 			Op:  op,
 			Err: err,
 		}
@@ -55,20 +63,20 @@ func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) (*ScanOut
 	deks, err := s.client.enclaveClient.DecryptDEKs(ctx, dekObjs)
 	if err != nil {
 		if internal.IsContextError(err) {
-			return nil, &errors.Error{
+			return nil, nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
 			}
 		}
-		return nil, &errors.Error{
+		return nil, nil, &errors.Error{
 			Op:  op,
 			Err: err,
 		}
 	}
 
-	slicePtr := reflect.ValueOf(obj)
-	sliceVal := slicePtr.Elem()
-	elemType := sliceVal.Type().Elem()
+	// T is *Book, so structType is Book
+	structType := reflect.TypeOf((*T)(nil)).Elem().Elem()
+	results := make([]T, 0, len(data.Results))
 
 	for i, item := range data.Results {
 		if deks[i].Error != nil {
@@ -78,55 +86,41 @@ func (s *Schema) Scan(ctx context.Context, obj any, config *ScanInput) (*ScanOut
 		decryptedObjBytes, err := crypto.DecryptObjectProbabilistic(item.EncryptedObj, deks[i].DEK)
 		if err != nil {
 			if internal.IsContextError(err) {
-				return nil, &errors.Error{
+				return nil, nil, &errors.Error{
 					Op:  op,
 					Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
 				}
 			}
-			return nil, &errors.Error{
+			return nil, nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: failed to decrypt object: %v", errors.ErrEncryption, err),
 			}
 		}
 
-		elemPtr := reflect.New(elemType)
-
 		var raw map[string]any
 		if err = json.Unmarshal(decryptedObjBytes, &raw); err != nil {
-			return nil, &errors.Error{
+			return nil, nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: failed to unmarshal object: %v", errors.ErrEncryption, err),
 			}
 		}
-		if err = s.populate(elemPtr.Interface(), raw); err != nil {
-			return nil, &errors.Error{
+		obj := reflect.New(structType).Interface().(T)
+		if err = s.populate(obj, raw); err != nil {
+			return nil, nil, &errors.Error{
 				Op:  op,
 				Err: err,
 			}
 		}
 
-		// Update GardbMeta fields
-		elemVal := elemPtr.Elem()
-		metaField := elemVal.FieldByName("GardbMeta")
-		if !metaField.IsValid() {
-			return nil, &errors.Error{
-				Op:  op,
-				Err: fmt.Errorf("%w: GardbMeta field not found", errors.ErrValidation),
-			}
-		}
-
-		meta := metaField.Interface().(GardbMeta)
-		meta.schema = s
+		meta := obj.getGardbMeta()
 		meta.ID = item.ObjectID
 		meta.CreatedAt = item.CreatedAt
 		meta.UpdatedAt = item.UpdatedAt
 
-		metaField.Set(reflect.ValueOf(meta))
-
-		sliceVal.Set(reflect.Append(sliceVal, elemVal))
+		results = append(results, obj)
 	}
 
-	return &ScanOutput{
+	return results, &ScanOutput{
 		NextToken: data.NextToken,
 	}, nil
 }

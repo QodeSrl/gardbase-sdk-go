@@ -145,8 +145,8 @@ func (c *Client) Close() error {
 	return c.enclaveClient.Close()
 }
 
-func (c *Client) Schema(ctx context.Context, name string, model Model) (*Schema, error) {
-	const op = "Client.Schema"
+func Schema[T GardbObject](ctx context.Context, client *Client, name string, model Model) (*gardbSchema[T], error) {
+	const op = "Schema"
 
 	if name == "" {
 		return nil, &errors.Error{
@@ -180,22 +180,22 @@ func (c *Client) Schema(ctx context.Context, name string, model Model) (*Schema,
 		}
 	}
 
-	tableHash, ok := c.cache.Get("tablehash__" + name)
+	tableHash, ok := client.cache.Get("tablehash__" + name)
 	if !ok || tableHash == "" || tableHash == nil {
-		hash, err := c.enclaveClient.GetTableHash(ctx, name)
+		hash, err := client.enclaveClient.GetTableHash(ctx, name)
 		if err != nil {
 			return nil, err
 		}
-		c.cache.Set("tablehash__"+name, hash)
+		client.cache.Set("tablehash__"+name, hash)
 		tableHash = hash
 	}
 
-	s := &Schema{
+	s := &gardbSchema[T]{
 		name:       name,
 		tableHash:  tableHash.(string),
 		fields:     fields,
 		timeFields: timeFields,
-		client:     c,
+		client:     client,
 	}
 
 	return s, nil
