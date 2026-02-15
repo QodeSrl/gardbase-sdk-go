@@ -121,19 +121,30 @@ func (ec *EnclaveClient) GetSessionInfo(ctx context.Context) *SessionInfo {
 	}
 }
 
-func (ec *EnclaveClient) GenerateDEK(ctx context.Context, count int) ([]crypto.GeneratedDEK, error) {
+func (ec *EnclaveClient) GenerateDEK(ctx context.Context, tableHash string, count int) ([]crypto.GeneratedDEK, []byte, error) {
 	if count <= 0 {
-		return nil, fmt.Errorf("%w: count must be greater than 0", errors.ErrValidation)
+		return nil, nil, fmt.Errorf("%w: count must be greater than 0", errors.ErrValidation)
 	}
 
 	if err := ec.ensureSession(ctx); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ec.essMu.RLock()
 	defer ec.essMu.RUnlock()
 
-	return ec.ess.GenerateDEK(ctx, count)
+	return ec.ess.GenerateDEK(ctx, tableHash, count)
+}
+
+func (ec *EnclaveClient) GetTableIEK(ctx context.Context, tableHash string) ([]byte, error) {
+	if err := ec.ensureSession(ctx); err != nil {
+		return nil, fmt.Errorf("%w: %w", errors.ErrSession, err)
+	}
+
+	ec.essMu.RLock()
+	defer ec.essMu.RUnlock()
+
+	return ec.ess.GetTableIEK(ctx, tableHash)
 }
 
 type DecryptDEKObject struct {

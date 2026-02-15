@@ -101,6 +101,7 @@ func (s *gardbSchema[T]) Get(ctx context.Context, id string) (T, error) {
 	meta.ID = id
 	meta.CreatedAt = data.CreatedAt
 	meta.UpdatedAt = data.UpdatedAt
+	meta.Version = data.Version
 
 	return obj, nil
 }

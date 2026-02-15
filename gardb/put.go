@@ -44,7 +44,7 @@ func (s *gardbSchema[T]) Put(ctx context.Context, obj T) error {
 	}
 
 	// Generate a DEK using the enclave client
-	deks, err := s.client.enclaveClient.GenerateDEK(ctx, 1)
+	deks, iek, err := s.client.enclaveClient.GenerateDEK(ctx, s.tableHash, 1)
 	if err != nil {
 		if internal.IsContextError(err) {
 			return &errors.Error{
@@ -64,8 +64,10 @@ func (s *gardbSchema[T]) Put(ctx context.Context, obj T) error {
 		}
 	}
 
+	s.tableIEK = iek
+
 	// Call the API client's Put method to handle encryption and upload
-	respBody, err := s.client.apiClient.Put(ctx, values, indexes, deks[0], s.name, s.tableHash)
+	respBody, err := s.client.apiClient.Put(ctx, values, indexes, deks[0], iek, s.name, s.tableHash)
 	if err != nil {
 		if internal.IsContextError(err) {
 			return &errors.Error{
@@ -86,6 +88,7 @@ func (s *gardbSchema[T]) Put(ctx context.Context, obj T) error {
 	// Update timestamps
 	meta.CreatedAt = respBody.CreatedAt
 	meta.UpdatedAt = respBody.CreatedAt
+	meta.Version = respBody.Version
 
 	return nil
 }

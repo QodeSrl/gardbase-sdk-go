@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"reflect"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 	"github.com/QodeSrl/gardbase-sdk-go/internal"
@@ -74,8 +73,6 @@ func (s *gardbSchema[T]) Scan(ctx context.Context, config *ScanInput) ([]T, *Sca
 		}
 	}
 
-	// T is *Book, so structType is Book
-	structType := reflect.TypeOf((*T)(nil)).Elem().Elem()
 	results := make([]T, 0, len(data.Results))
 
 	for i, item := range data.Results {
@@ -104,7 +101,7 @@ func (s *gardbSchema[T]) Scan(ctx context.Context, config *ScanInput) ([]T, *Sca
 				Err: fmt.Errorf("%w: failed to unmarshal object: %v", errors.ErrEncryption, err),
 			}
 		}
-		obj := reflect.New(structType).Interface().(T)
+		obj := s.newInstance()
 		if err = s.populate(obj, raw); err != nil {
 			return nil, nil, &errors.Error{
 				Op:  op,

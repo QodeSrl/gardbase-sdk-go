@@ -96,4 +96,6 @@ var (
 	ErrUnauthorized        = errors.New("unauthorized")
 	ErrRateLimited         = errors.New("rate limited")
 	ErrCancelledOrTimedOut = errors.New("operation cancelled or timed out")
+	ErrVersionConflict     = errors.New("version conflict")
+	ErrMaxRetriesExceeded  = errors.New("max retries exceeded")
 )

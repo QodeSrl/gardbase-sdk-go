@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
+	"reflect"
 	"sync"
 	"time"
 
@@ -196,6 +197,7 @@ func Schema[T GardbObject](ctx context.Context, client *Client, name string, mod
 		fields:     fields,
 		timeFields: timeFields,
 		client:     client,
+		typ:        reflect.TypeOf((*T)(nil)).Elem().Elem(),
 	}
 
 	return s, nil

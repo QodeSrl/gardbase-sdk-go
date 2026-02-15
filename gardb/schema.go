@@ -1,6 +1,7 @@
 package gardb
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"time"
@@ -12,9 +13,11 @@ import (
 type gardbSchema[T GardbObject] struct {
 	name       string
 	tableHash  string
+	tableIEK   []byte
 	fields     Model
 	timeFields []string
 	client     *Client
+	typ        reflect.Type // the struct type T points to
 }
 
 type GardbObject interface {
@@ -25,12 +28,33 @@ type GardbBase struct {
 	GardbMeta
 }
 
+func (s *gardbSchema[T]) ensureTableIEK(ctx context.Context) error {
+	const op = "Schema.ensureTableIEK"
+
+	if s.tableIEK != nil {
+		return nil
+	}
+
+	iek, err := s.client.enclaveClient.GetTableIEK(ctx, s.name)
+	if err != nil {
+		return &errors.Error{
+			Op:  op,
+			Err: err,
+		}
+	}
+
+	s.tableIEK = iek
+
+	return nil
+}
+
 func (g *GardbBase) getGardbMeta() *GardbMeta {
 	return &g.GardbMeta
 }
 
 type GardbMeta struct {
 	ID        string
+	Version   int32
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -40,6 +64,10 @@ type Model map[string]*schema.Field // schema.String(), schema.Int(), etc.
 // Name returns the name of the schema
 func (s *gardbSchema[T]) Name() string {
 	return s.name
+}
+
+func (s *gardbSchema[T]) newInstance() T {
+	return reflect.New(s.typ).Interface().(T)
 }
 
 // validate checks if the given struct pointer conforms to the schema definition (field names, types, required fields)
