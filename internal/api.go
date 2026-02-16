@@ -35,7 +35,7 @@ type PutObjectResult struct {
 }
 
 // Put encrypts a JSON object and its indexed fields, creates a remote object record, and uploads the encrypted object payload.
-func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[string]any, dek crypto.GeneratedDEK, iek []byte, schemaName string, tableHash string) (PutObjectResult, error) {
+func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[string]any, dek crypto.GeneratedDEK, iek []byte, schemaName string, tableHash string, objectId string, currentVersion int32) (PutObjectResult, error) {
 	// Encrypt object with DEK
 	objBytes, err := json.Marshal(values)
 	if err != nil {
@@ -65,6 +65,7 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 
 	if blobSize < 100*1024 { // For smaller objects, include the encrypted blob directly in the request
 		reqBody, err := json.Marshal(objects.PutObjectRequest{
+			ObjectID:           objectId,
 			TableHash:          tableHash,
 			EncryptedBlob:      base64.StdEncoding.EncodeToString(encryptedObj),
 			KMSEncryptedDEK:    base64.StdEncoding.EncodeToString(dek.KMSEncryptedDEK),
@@ -72,7 +73,7 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 			DEKNonce:           base64.StdEncoding.EncodeToString(dek.MasterKeyNonce),
 			Indexes:            encryptedIndexes,
 			Sensitivity:        "medium",
-			Version:            1,
+			Version:            currentVersion + 1,
 		})
 		if err != nil {
 			return PutObjectResult{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
@@ -113,9 +114,10 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 	} else {
 		// Request pre-signed URL for uploading large object
 		reqBody, err := json.Marshal(objects.RequestPutLargeObjectRequest{
+			ObjectID:  objectId,
 			TableHash: tableHash,
 			BlobSize:  blobSize,
-			Version:   1,
+			Version:   currentVersion + 1,
 		})
 		if err != nil {
 			return PutObjectResult{}, fmt.Errorf("%w: %w", errors.ErrValidation, err)
@@ -165,7 +167,7 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 			DEKNonce:           base64.StdEncoding.EncodeToString(dek.MasterKeyNonce),
 			Indexes:            encryptedIndexes,
 			Sensitivity:        "medium",
-			Version:            1,
+			Version:            currentVersion + 1,
 		})
 		if err != nil {
 			return PutObjectResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
