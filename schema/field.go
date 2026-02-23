@@ -24,7 +24,6 @@ type Field struct {
 	TypeValidator func(any) bool
 	defaultValue  any
 	required      bool
-	searchable    bool
 }
 
 func String() *Field {
@@ -100,16 +99,11 @@ func (f *Field) Required() *Field {
 	return f
 }
 
-func (f *Field) Searchable() *Field {
-	f.searchable = true
-	return f
-}
-
 func (f *Field) IsRequired() bool {
 	return f.required
 }
 
-func (f *Field) ExtractIntoValuesIndexes(val reflect.Value, values *map[string]any, indexes *map[string]any, valErrors *errors.ValidationErrors, tag string) {
+func (f *Field) ExtractIntoValues(val reflect.Value, values *map[string]any, valErrors *errors.ValidationErrors, tag string) {
 	isEmpty := false
 	switch val.Kind() {
 	case reflect.Bool:
@@ -138,14 +132,8 @@ func (f *Field) ExtractIntoValuesIndexes(val reflect.Value, values *map[string]a
 			t := val.Interface().(time.Time)
 			unix := t.Unix()
 			(*values)[tag] = unix
-			if f.searchable {
-				(*indexes)[tag] = unix
-			}
 		} else {
 			(*values)[tag] = val.Interface()
-			if f.searchable {
-				(*indexes)[tag] = val.Interface()
-			}
 		}
 	}
 }
