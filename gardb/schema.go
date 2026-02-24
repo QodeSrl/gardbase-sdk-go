@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
+	"github.com/QodeSrl/gardbase-sdk-go/internal"
 	"github.com/QodeSrl/gardbase-sdk-go/schema"
+	"github.com/QodeSrl/gardbase/pkg/api/objects"
 )
 
 type gardbSchema[T GardbObject] struct {
@@ -15,6 +17,7 @@ type gardbSchema[T GardbObject] struct {
 	tableHash  string
 	tableIEK   []byte
 	fields     Model
+	indexes    []objects.IndexName
 	timeFields []string
 	client     *Client
 	typ        reflect.Type // the struct type T points to
@@ -60,6 +63,8 @@ type GardbMeta struct {
 }
 
 type Model map[string]*schema.Field // schema.String(), schema.Int(), etc.
+
+type Indexes []objects.Index
 
 // Name returns the name of the schema
 func (s *gardbSchema[T]) Name() string {
@@ -120,12 +125,12 @@ func (s *gardbSchema[T]) validate(op string, obj T) error {
 }
 
 // extract takes a struct pointer and extracts field values into a values map and an indexes map, applying default values and checking required fields
-func (s *gardbSchema[T]) extract(obj T) (values map[string]any, indexes map[string]any, err error) {
+func (s *gardbSchema[T]) extract(obj T) (values map[string]any, indexes []internal.Index, err error) {
 	const op = "Schema.Extract"
 	valErrors := &errors.ValidationErrors{Op: op}
 
 	values = make(map[string]any, len(s.fields))
-	indexes = make(map[string]any)
+	indexes = make([]internal.Index, 0, len(s.indexes))
 
 	rv := reflect.ValueOf(obj).Elem()
 	rt := rv.Type()
@@ -136,7 +141,28 @@ func (s *gardbSchema[T]) extract(obj T) (values map[string]any, indexes map[stri
 		if tag == "" {
 			continue
 		}
-		s.fields[tag].ExtractIntoValuesIndexes(rv.Field(i), &values, &indexes, valErrors, tag)
+		s.fields[tag].ExtractIntoValues(rv.Field(i), &values, valErrors, tag)
+	}
+
+	for _, idx := range s.indexes {
+		hashVal, ok := values[idx.HashField]
+		if !ok {
+			valErrors.Add(idx.HashField, fmt.Sprintf("%w: missing hash key for index", errors.ErrValidation), idx.HashField)
+			continue
+		}
+		var rangeVal any
+		if idx.RangeField != nil {
+			rangeVal, ok = values[*idx.RangeField]
+			if !ok {
+				valErrors.Add(*idx.RangeField, fmt.Sprintf("%w: missing range key for index", errors.ErrValidation), *idx.RangeField)
+				continue
+			}
+		}
+		indexes = append(indexes, internal.Index{
+			Name:       idx,
+			HashValue:  hashVal,
+			RangeValue: rangeVal,
+		})
 	}
 
 	if valErrors.HasErrors() {
