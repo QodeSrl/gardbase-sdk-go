@@ -35,7 +35,7 @@ type PutObjectResult struct {
 }
 
 // Put encrypts a JSON object and its indexed fields, creates a remote object record, and uploads the encrypted object payload.
-func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[string]any, dek crypto.GeneratedDEK, iek []byte, schemaName string, tableHash string, objectId string, currentVersion int32) (PutObjectResult, error) {
+func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes []Index, dek crypto.GeneratedDEK, iek []byte, schemaName string, tableHash string, objectId string, currentVersion int32) (PutObjectResult, error) {
 	// Encrypt object with DEK
 	objBytes, err := json.Marshal(values)
 	if err != nil {
@@ -47,18 +47,45 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes map[
 	}
 
 	// Encrypt indexes with IEK
-	encryptedIndexes := make(map[string][]byte, len(indexes))
+	encryptedIndexes := make([]objects.Index, len(indexes))
 	for k, v := range indexes {
-		indexBytes, err := json.Marshal(v)
-		if err != nil {
-			return PutObjectResult{}, fmt.Errorf("%w: (index %s) %v", errors.ErrValidation, k, err)
+		idx := objects.Index{
+			Name: v.Name,
 		}
-		context := fmt.Sprintf("%s:%s", schemaName, k)
-		encryptedIndex, err := crypto.EncryptObjectDeterministic(indexBytes, context, iek)
-		if err != nil {
-			return PutObjectResult{}, fmt.Errorf("%w: (index %s) %v", errors.ErrEncryption, k, err)
+		var context string
+		var indexNameForErrors string
+		if v.Name.RangeField != nil {
+			context = fmt.Sprintf("%s:%s:%s", schemaName, v.Name.HashField, *v.Name.RangeField)
+			indexNameForErrors = fmt.Sprintf("%s:%s", v.Name.HashField, *v.Name.RangeField)
+		} else {
+			context = fmt.Sprintf("%s:%s", schemaName, v.Name.HashField)
+			indexNameForErrors = v.Name.HashField
 		}
-		encryptedIndexes[k] = encryptedIndex
+		// encrypt hash value with det enc using IEK
+		hashValBytes, err := json.Marshal(v.HashValue)
+		if err != nil {
+			return PutObjectResult{}, fmt.Errorf("%w: (index %s) %v", errors.ErrValidation, indexNameForErrors, err)
+		}
+		encryptedHashVal, err := crypto.EncryptObjectDeterministicFixed(hashValBytes, context, iek)
+		if err != nil {
+			return PutObjectResult{}, fmt.Errorf("%w: (index %s) %v", errors.ErrEncryption, indexNameForErrors, err)
+		}
+		idx.Token = encryptedHashVal
+		if v.Name.RangeField != nil {
+			val, err := crypto.NormalizeValue(v.RangeValue)
+			if err != nil {
+				return PutObjectResult{}, fmt.Errorf("%w: (index %s) %v", errors.ErrValidation, indexNameForErrors, err)
+			}
+			encryptedRangeVal, err := crypto.EncryptObjectLinearOPE(val, iek)
+			if err != nil {
+				return PutObjectResult{}, fmt.Errorf("%w: (index %s) %v", errors.ErrEncryption, indexNameForErrors, err)
+			}
+			token := make([]byte, 0, len(encryptedHashVal)+len(encryptedRangeVal))
+			token = append(token, encryptedHashVal...)
+			token = append(token, encryptedRangeVal...)
+			idx.Token = token
+		}
+		encryptedIndexes[k] = idx
 	}
 
 	blobSize := int64(len(encryptedObj))
