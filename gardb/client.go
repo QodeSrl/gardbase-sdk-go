@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
 	"github.com/QodeSrl/gardbase-sdk-go/internal"
 	"github.com/QodeSrl/gardbase-sdk-go/schema"
+	"github.com/QodeSrl/gardbase/pkg/api/objects"
 )
 
 type Client struct {
@@ -146,7 +148,7 @@ func (c *Client) Close() error {
 	return c.enclaveClient.Close()
 }
 
-func Schema[T GardbObject](ctx context.Context, client *Client, name string, model Model) (*gardbSchema[T], error) {
+func Schema[T GardbObject](ctx context.Context, client *Client, name string, model Model, indexes []objects.IndexName) (*gardbSchema[T], error) {
 	const op = "Schema"
 
 	if name == "" {
@@ -181,6 +183,41 @@ func Schema[T GardbObject](ctx context.Context, client *Client, name string, mod
 		}
 	}
 
+	for _, idx := range indexes {
+		if idx.HashField == "" {
+			return nil, &errors.Error{
+				Op:  op,
+				Err: fmt.Errorf("%w: index hash key cannot be empty", errors.ErrInvalidSchema),
+			}
+		}
+		if _, ok := fields[idx.HashField]; !ok {
+			return nil, &errors.Error{
+				Op:  op,
+				Err: fmt.Errorf("%w: index hash key '%s' not found in model fields", errors.ErrInvalidSchema, idx.HashField),
+			}
+		}
+		if !slices.Contains([]schema.FieldType{schema.StringType, schema.IntegerType, schema.BooleanType, schema.TimeType}, fields[idx.HashField].Typ) {
+			return nil, &errors.Error{
+				Op:  op,
+				Err: fmt.Errorf("%w: index hash key '%s' must be of type string, int, bool, or time", errors.ErrInvalidSchema, idx.HashField),
+			}
+		}
+		if idx.RangeField != nil {
+			if _, ok := fields[*idx.RangeField]; !ok {
+				return nil, &errors.Error{
+					Op:  op,
+					Err: fmt.Errorf("%w: index range key '%s' not found in model fields", errors.ErrInvalidSchema, *idx.RangeField),
+				}
+			}
+			if !slices.Contains([]schema.FieldType{schema.StringType, schema.IntegerType, schema.BooleanType, schema.FloatType, schema.TimeType}, fields[*idx.RangeField].Typ) {
+				return nil, &errors.Error{
+					Op:  op,
+					Err: fmt.Errorf("%w: index range key '%s' must be of type string, int, bool, float, or time", errors.ErrInvalidSchema, *idx.RangeField),
+				}
+			}
+		}
+	}
+
 	tableHash, ok := client.cache.Get("tablehash__" + name)
 	if !ok || tableHash == "" || tableHash == nil {
 		hash, err := client.enclaveClient.GetTableHash(ctx, name)
@@ -195,10 +232,26 @@ func Schema[T GardbObject](ctx context.Context, client *Client, name string, mod
 		name:       name,
 		tableHash:  tableHash.(string),
 		fields:     fields,
+		indexes:    indexes,
 		timeFields: timeFields,
 		client:     client,
 		typ:        reflect.TypeOf((*T)(nil)).Elem().Elem(),
 	}
 
 	return s, nil
+}
+
+func Hash(hashKey string) *objects.IndexName {
+	return &objects.IndexName{HashField: hashKey}
+}
+
+func Range(rangeKey string) *objects.IndexName {
+	return &objects.IndexName{RangeField: &rangeKey}
+}
+
+func Index(hashKeyIndex, rangeKeyIndex *objects.IndexName) *objects.IndexName {
+	return &objects.IndexName{
+		HashField:  hashKeyIndex.HashField,
+		RangeField: rangeKeyIndex.RangeField,
+	}
 }
