@@ -86,14 +86,20 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 
 	var bookIds []string
 
-	bookSchema, err := gardb.Schema[*Book](ctx, client, "book", gardb.Model{
-		"name":         schema.String().Required(),
-		"author":       schema.String().Required(),
-		"pages":        schema.Int().Required(),
-		"published_at": schema.Time().Required(),
-		"isbn":         schema.String().Required(),
-		"in_stock":     schema.Bool().Required(),
-	})
+	bookSchema, err := gardb.Schema[*Book](ctx, client, "book",
+		gardb.Model{
+			"name":         schema.String().Required(),
+			"author":       schema.String().Required(),
+			"pages":        schema.Int().Required(),
+			"published_at": schema.Time().Required(),
+			"isbn":         schema.String().Required(),
+			"in_stock":     schema.Bool().Required(),
+		},
+		gardb.Indexes{
+			gardb.Index(gardb.Hash("name"), nil),
+			gardb.Index(gardb.Hash("author"), gardb.Range("published_at")),
+		},
+	)
 	if err != nil {
 		t.Fatalf("Failed to create schema: %v", err)
 	}
@@ -264,7 +270,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 
 		emptySchema, err := gardb.Schema[*EmptyRecord](ctx, client, "empty_table", gardb.Model{
 			"field": schema.String().Required(),
-		})
+		}, nil)
 		if err != nil {
 			t.Fatalf("Failed to create empty table schema: %v", err)
 		}
@@ -449,7 +455,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 		invalidSchema, _ := gardb.Schema[*InvalidBook](ctx, client, "invalid_book", gardb.Model{
 			"name":   schema.String().Required(),
 			"author": schema.String().Required(),
-		})
+		}, nil)
 		invalidBook := InvalidBook{Name: "Test"}
 		err = invalidSchema.Put(ctx, &invalidBook)
 		if err == nil {

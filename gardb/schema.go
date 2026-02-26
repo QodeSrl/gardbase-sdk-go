@@ -17,7 +17,7 @@ type gardbSchema[T GardbObject] struct {
 	tableHash  string
 	tableIEK   []byte
 	fields     Model
-	indexes    []objects.IndexName
+	indexes    Indexes
 	timeFields []string
 	client     *Client
 	typ        reflect.Type // the struct type T points to
@@ -64,7 +64,7 @@ type GardbMeta struct {
 
 type Model map[string]*schema.Field // schema.String(), schema.Int(), etc.
 
-type Indexes []objects.Index
+type Indexes []*objects.IndexName
 
 // Name returns the name of the schema
 func (s *gardbSchema[T]) Name() string {
@@ -147,19 +147,19 @@ func (s *gardbSchema[T]) extract(obj T) (values map[string]any, indexes []intern
 	for _, idx := range s.indexes {
 		hashVal, ok := values[idx.HashField]
 		if !ok {
-			valErrors.Add(idx.HashField, fmt.Sprintf("%w: missing hash key for index", errors.ErrValidation), idx.HashField)
+			valErrors.Add(idx.HashField, fmt.Sprintf("%v: missing hash key for index", errors.ErrValidation), idx.HashField)
 			continue
 		}
 		var rangeVal any
 		if idx.RangeField != nil {
 			rangeVal, ok = values[*idx.RangeField]
 			if !ok {
-				valErrors.Add(*idx.RangeField, fmt.Sprintf("%w: missing range key for index", errors.ErrValidation), *idx.RangeField)
+				valErrors.Add(*idx.RangeField, fmt.Sprintf("%v: missing range key for index", errors.ErrValidation), *idx.RangeField)
 				continue
 			}
 		}
 		indexes = append(indexes, internal.Index{
-			Name:       idx,
+			Name:       *idx,
 			HashValue:  hashVal,
 			RangeValue: rangeVal,
 		})
