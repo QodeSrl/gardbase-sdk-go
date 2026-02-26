@@ -2,7 +2,6 @@ package gardb
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -56,7 +55,7 @@ func (s *gardbSchema[T]) Scan(ctx context.Context, config *ScanInput) ([]T, *Sca
 	for i, item := range data.Results {
 		dekObjs[i] = internal.DecryptDEKObject{
 			ObjectID: item.ObjectID,
-			DEKB64:   base64.StdEncoding.EncodeToString(item.KMSWrappedDEK),
+			DEK:      item.KMSWrappedDEK,
 		}
 	}
 	deks, err := s.client.enclaveClient.DecryptDEKs(ctx, dekObjs)

@@ -2,7 +2,6 @@ package gardb
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -50,7 +49,7 @@ func (s *gardbSchema[T]) Get(ctx context.Context, id string) (T, error) {
 	ptDEK, err := s.client.enclaveClient.DecryptDEKs(ctx, []internal.DecryptDEKObject{
 		{
 			ObjectID: id,
-			DEKB64:   base64.StdEncoding.EncodeToString(data.KMSWrappedDEK),
+			DEK:      data.KMSWrappedDEK,
 		},
 	})
 	if err != nil {

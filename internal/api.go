@@ -3,7 +3,6 @@ package internal
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -94,10 +93,10 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes []In
 		reqBody, err := json.Marshal(objects.PutObjectRequest{
 			ObjectID:           objectId,
 			TableHash:          tableHash,
-			EncryptedBlob:      base64.StdEncoding.EncodeToString(encryptedObj),
-			KMSEncryptedDEK:    base64.StdEncoding.EncodeToString(dek.KMSEncryptedDEK),
-			MasterEncryptedDEK: base64.StdEncoding.EncodeToString(dek.MasterKeyEncryptedDEK),
-			DEKNonce:           base64.StdEncoding.EncodeToString(dek.MasterKeyNonce),
+			EncryptedBlob:      encryptedObj,
+			KMSEncryptedDEK:    dek.KMSEncryptedDEK,
+			MasterEncryptedDEK: dek.MasterKeyEncryptedDEK,
+			DEKNonce:           dek.MasterKeyNonce,
 			Indexes:            encryptedIndexes,
 			Sensitivity:        "medium",
 			Version:            currentVersion + 1,
@@ -189,9 +188,9 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes []In
 		reqBody, err = json.Marshal(objects.ConfirmPutLargeObjectRequest{
 			ObjectID:           respBody.ObjectID,
 			TableHash:          tableHash,
-			KMSEncryptedDEK:    base64.StdEncoding.EncodeToString(dek.KMSEncryptedDEK),
-			MasterEncryptedDEK: base64.StdEncoding.EncodeToString(dek.MasterKeyEncryptedDEK),
-			DEKNonce:           base64.StdEncoding.EncodeToString(dek.MasterKeyNonce),
+			KMSEncryptedDEK:    dek.KMSEncryptedDEK,
+			MasterEncryptedDEK: dek.MasterKeyEncryptedDEK,
+			DEKNonce:           dek.MasterKeyNonce,
 			Indexes:            encryptedIndexes,
 			Sensitivity:        "medium",
 			Version:            currentVersion + 1,
@@ -284,7 +283,9 @@ func (c *APIClient) Get(ctx context.Context, tableHash string, id string) (GetOb
 
 	var encryptedObj []byte
 
-	if respBody.GetURL != "" {
+	if respBody.GetURL == "" {
+		encryptedObj = respBody.EncryptedBlob
+	} else {
 		// Download the encrypted object from S3
 		req, err = http.NewRequestWithContext(ctx, "GET", respBody.GetURL, nil)
 		if err != nil {
@@ -315,35 +316,15 @@ func (c *APIClient) Get(ctx context.Context, tableHash string, id string) (GetOb
 			return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 		}
 		encryptedObj = buf.Bytes()
-	} else {
-		encryptedObj, err = base64.StdEncoding.DecodeString(respBody.EncryptedBlob)
-		if err != nil {
-			return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
-		}
-	}
-
-	KMSWrappedDEK, err := base64.StdEncoding.DecodeString(respBody.KMSWrappedDEK)
-	if err != nil {
-		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
-	}
-
-	MasterWrappedDEK, err := base64.StdEncoding.DecodeString(respBody.MasterWrappedDEK)
-	if err != nil {
-		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
-	}
-
-	DEKNonce, err := base64.StdEncoding.DecodeString(respBody.DEKNonce)
-	if err != nil {
-		return GetObjectResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 	}
 
 	// Build and return the result
 	return GetObjectResult{
 		ObjectID:         id,
 		EncryptedObj:     encryptedObj,
-		KMSWrappedDEK:    KMSWrappedDEK,
-		MasterWrappedDEK: MasterWrappedDEK,
-		DEKNonce:         DEKNonce,
+		KMSWrappedDEK:    respBody.KMSWrappedDEK,
+		MasterWrappedDEK: respBody.MasterWrappedDEK,
+		DEKNonce:         respBody.DEKNonce,
 		CreatedAt:        respBody.CreatedAt,
 		UpdatedAt:        respBody.UpdatedAt,
 		Version:          respBody.Version,
@@ -395,7 +376,9 @@ func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextT
 	for _, obj := range respBody.Objects {
 		var encryptedObj []byte
 
-		if obj.GetURL != "" {
+		if obj.GetURL == "" {
+			encryptedObj = obj.EncryptedBlob
+		} else {
 			// Download the encrypted object from S3
 			req, err = http.NewRequestWithContext(ctx, "GET", obj.GetURL, nil)
 			if err != nil {
@@ -426,35 +409,15 @@ func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextT
 				return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 			}
 			encryptedObj = buf.Bytes()
-		} else {
-			encryptedObj, err = base64.StdEncoding.DecodeString(obj.EncryptedBlob)
-			if err != nil {
-				return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
-			}
-		}
-
-		KMSWrappedDEK, err := base64.StdEncoding.DecodeString(obj.KMSWrappedDEK)
-		if err != nil {
-			return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
-		}
-
-		MasterWrappedDEK, err := base64.StdEncoding.DecodeString(obj.MasterWrappedDEK)
-		if err != nil {
-			return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
-		}
-
-		DEKNonce, err := base64.StdEncoding.DecodeString(obj.DEKNonce)
-		if err != nil {
-			return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 		}
 
 		// Build and return the result
 		results.Results = append(results.Results, GetObjectResult{
 			ObjectID:         obj.ObjectID,
 			EncryptedObj:     encryptedObj,
-			KMSWrappedDEK:    KMSWrappedDEK,
-			MasterWrappedDEK: MasterWrappedDEK,
-			DEKNonce:         DEKNonce,
+			KMSWrappedDEK:    obj.KMSWrappedDEK,
+			MasterWrappedDEK: obj.MasterWrappedDEK,
+			DEKNonce:         obj.DEKNonce,
 			CreatedAt:        obj.CreatedAt,
 			UpdatedAt:        obj.UpdatedAt,
 		})

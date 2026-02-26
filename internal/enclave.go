@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -149,7 +148,7 @@ func (ec *EnclaveClient) GetTableIEK(ctx context.Context, tableHash string) ([]b
 
 type DecryptDEKObject struct {
 	ObjectID string
-	DEKB64   string
+	DEK      []byte
 }
 
 type DecryptDEKResult struct {
@@ -173,7 +172,7 @@ func (ec *EnclaveClient) DecryptDEKs(ctx context.Context, dekObj []DecryptDEKObj
 	for i, obj := range dekObj {
 		item := enclaveproto.SessionUnwrapItem{
 			ObjectId:   obj.ObjectID,
-			Ciphertext: obj.DEKB64,
+			Ciphertext: obj.DEK,
 		}
 		items[i] = item
 	}
@@ -224,8 +223,8 @@ func (ec *EnclaveClient) GetTableHash(ctx context.Context, tableName string) (st
 
 	reqBody, err := json.Marshal(objects.GetTableHashRequest{
 		SessionID:                 ec.ess.SessionId,
-		SessionEncryptedTableName: base64.StdEncoding.EncodeToString(encryptedTableName),
-		SessionTableNameNonce:     base64.StdEncoding.EncodeToString(nonce),
+		SessionEncryptedTableName: encryptedTableName,
+		SessionTableNameNonce:     nonce,
 	})
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to marshal request body: %v", errors.ErrValidation, err)
