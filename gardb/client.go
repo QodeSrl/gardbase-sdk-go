@@ -250,8 +250,9 @@ func Range(rangeKey string) *objects.IndexName {
 }
 
 func Index(hashKeyIndex, rangeKeyIndex *objects.IndexName) *objects.IndexName {
-	return &objects.IndexName{
-		HashField:  hashKeyIndex.HashField,
-		RangeField: rangeKeyIndex.RangeField,
+	idx := &objects.IndexName{HashField: hashKeyIndex.HashField}
+	if rangeKeyIndex != nil {
+		idx.RangeField = rangeKeyIndex.RangeField
 	}
+	return idx
 }
