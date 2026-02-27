@@ -267,6 +267,9 @@ func (c *APIClient) Get(ctx context.Context, tableHash string, id string) (GetOb
 		if resp.StatusCode == http.StatusNotFound {
 			return GetObjectResult{}, fmt.Errorf("%w: object with ID %s not found", errors.ErrNotFound, id)
 		}
+		if resp.StatusCode == http.StatusGone {
+			return GetObjectResult{}, fmt.Errorf("%w: object with ID %s has been deleted", errors.ErrDeleted, id)
+		}
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			return GetObjectResult{}, fmt.Errorf("%w: unauthorized access to object with ID %s", errors.ErrUnauthorized, id)
 		}
@@ -456,6 +459,39 @@ func (c *APIClient) Delete(ctx context.Context, tableHash string, objectId strin
 			return fmt.Errorf("%w: rate limit exceeded when deleting object with ID %s", errors.ErrRateLimited, objectId)
 		}
 		return fmt.Errorf("%w: failed to delete object, status code: %d", errors.ErrNetwork, resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *APIClient) Recover(ctx context.Context, tableHash string, objectId string) error {
+	reqBody, err := json.Marshal(objects.RecoverObjectRequest{
+		TableHash: tableHash,
+		ObjectID:  objectId,
+	})
+	if err != nil {
+		return fmt.Errorf("%w: %v", errors.ErrValidation, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", c.APIEndpoint+"/objects/recover", bytes.NewReader(reqBody))
+	if err != nil {
+		return fmt.Errorf("%w: %v", errors.ErrValidation, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return fmt.Errorf("%w: object with ID %s not found", errors.ErrNotFound, objectId)
+		}
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("%w: unauthorized access to object with ID %s", errors.ErrUnauthorized, objectId)
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return fmt.Errorf("%w: rate limit exceeded when recovering object with ID %s", errors.ErrRateLimited, objectId)
+		}
+		return fmt.Errorf("%w: failed to recover object, status code: %d", errors.ErrNetwork, resp.StatusCode)
 	}
 	return nil
 }
