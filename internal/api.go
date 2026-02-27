@@ -426,3 +426,36 @@ func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextT
 
 	return results, nil
 }
+
+func (c *APIClient) Delete(ctx context.Context, tableHash string, objectId string) error {
+	reqBody, err := json.Marshal(objects.DeleteObjectRequest{
+		TableHash: tableHash,
+		ObjectID:  objectId,
+	})
+	if err != nil {
+		return fmt.Errorf("%w: %v", errors.ErrValidation, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", c.APIEndpoint+"/objects/delete", bytes.NewReader(reqBody))
+	if err != nil {
+		return fmt.Errorf("%w: %v", errors.ErrValidation, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return fmt.Errorf("%w: object with ID %s not found", errors.ErrNotFound, objectId)
+		}
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("%w: unauthorized access to object with ID %s", errors.ErrUnauthorized, objectId)
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return fmt.Errorf("%w: rate limit exceeded when deleting object with ID %s", errors.ErrRateLimited, objectId)
+		}
+		return fmt.Errorf("%w: failed to delete object, status code: %d", errors.ErrNetwork, resp.StatusCode)
+	}
+	return nil
+}

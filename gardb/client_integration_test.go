@@ -356,7 +356,6 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 	})
 
 	t.Run("09_delete_object", func(t *testing.T) {
-		t.Skip("Skipping delete test, not implemented yet")
 		t.Log("Deleting book object...")
 
 		if err := bookSchema.Delete(ctx, bookIds[0]); err != nil {
@@ -365,6 +364,20 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 
 		if _, err := bookSchema.Get(ctx, bookIds[0]); err == nil {
 			t.Fatalf("Expected error when getting deleted book, got none")
+		}
+
+		// Try to delete again to check error handling
+		if err := bookSchema.Delete(ctx, bookIds[0]); err == nil {
+			t.Fatalf("Expected error when deleting already deleted book, got none")
+		}
+
+		// Try to update deleted book to check error handling
+		mutateFn := func(dest *Book) error {
+			dest.InStock = false
+			return nil
+		}
+		if _, err := bookSchema.Update(ctx, bookIds[0], mutateFn); err == nil {
+			t.Fatalf("Expected error when updating deleted book, got none")
 		}
 
 		t.Log("Successfully deleted book and verified it cannot be retrieved")

@@ -93,6 +93,7 @@ var (
 	ErrEncryption          = errors.New("encryption error")
 	ErrNetwork             = errors.New("network error")
 	ErrNotFound            = errors.New("not found")
+	ErrDeleted             = errors.New("object deleted")
 	ErrUnauthorized        = errors.New("unauthorized")
 	ErrRateLimited         = errors.New("rate limited")
 	ErrCancelledOrTimedOut = errors.New("operation cancelled or timed out")
