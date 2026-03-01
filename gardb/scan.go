@@ -11,12 +11,14 @@ import (
 )
 
 type ScanInput struct {
-	Limit     int
-	NextToken *string
+	Limit  int
+	Cursor *string
 }
 
-type ScanOutput struct {
-	NextToken *string
+type ScanOutput[T GardbObject] struct {
+	Items      []T
+	Limit      int
+	NextCursor *string
 }
 
 // Scan retrieves a list of decrypted objects from the database based on the provided scan configuration.
@@ -34,25 +36,25 @@ type ScanOutput struct {
 //   - A slice of objects of type T containing the decrypted and unmarshalled data
 //   - A ScanOutput containing the next pagination token if more results are available
 //   - An error if any step of the retrieval, decryption, or unmarshalling process fails, or if the context is cancelled/times out
-func (s *gardbSchema[T]) Scan(ctx context.Context, config *ScanInput) ([]T, *ScanOutput, error) {
+func (s *gardbSchema[T]) Scan(ctx context.Context, config *ScanInput) (*ScanOutput[T], error) {
 	const op = "Schema.Scan"
 
-	data, err := s.client.apiClient.Scan(ctx, s.tableHash, config.Limit, config.NextToken)
+	data, err := s.client.apiClient.Scan(ctx, s.tableHash, config.Limit, config.Cursor)
 	if err != nil {
 		if internal.IsContextError(err) {
-			return nil, nil, &errors.Error{
+			return nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
 			}
 		}
-		return nil, nil, &errors.Error{
+		return nil, &errors.Error{
 			Op:  op,
 			Err: err,
 		}
 	}
 
-	dekObjs := make([]internal.DecryptDEKObject, len(data.Results))
-	for i, item := range data.Results {
+	dekObjs := make([]internal.DecryptDEKObject, len(data.Objects))
+	for i, item := range data.Objects {
 		dekObjs[i] = internal.DecryptDEKObject{
 			ObjectID: item.ObjectID,
 			DEK:      item.KMSWrappedDEK,
@@ -61,20 +63,20 @@ func (s *gardbSchema[T]) Scan(ctx context.Context, config *ScanInput) ([]T, *Sca
 	deks, err := s.client.enclaveClient.DecryptDEKs(ctx, dekObjs)
 	if err != nil {
 		if internal.IsContextError(err) {
-			return nil, nil, &errors.Error{
+			return nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
 			}
 		}
-		return nil, nil, &errors.Error{
+		return nil, &errors.Error{
 			Op:  op,
 			Err: err,
 		}
 	}
 
-	results := make([]T, 0, len(data.Results))
+	results := make([]T, 0, len(data.Objects))
 
-	for i, item := range data.Results {
+	for i, item := range data.Objects {
 		if deks[i].Error != nil {
 			continue
 		}
@@ -82,12 +84,12 @@ func (s *gardbSchema[T]) Scan(ctx context.Context, config *ScanInput) ([]T, *Sca
 		decryptedObjBytes, err := crypto.DecryptObjectProbabilistic(item.EncryptedObj, deks[i].DEK)
 		if err != nil {
 			if internal.IsContextError(err) {
-				return nil, nil, &errors.Error{
+				return nil, &errors.Error{
 					Op:  op,
 					Err: fmt.Errorf("%w: %w", errors.ErrCancelledOrTimedOut, err),
 				}
 			}
-			return nil, nil, &errors.Error{
+			return nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: failed to decrypt object: %v", errors.ErrEncryption, err),
 			}
@@ -95,14 +97,14 @@ func (s *gardbSchema[T]) Scan(ctx context.Context, config *ScanInput) ([]T, *Sca
 
 		var raw map[string]any
 		if err = json.Unmarshal(decryptedObjBytes, &raw); err != nil {
-			return nil, nil, &errors.Error{
+			return nil, &errors.Error{
 				Op:  op,
 				Err: fmt.Errorf("%w: failed to unmarshal object: %v", errors.ErrEncryption, err),
 			}
 		}
 		obj := s.newInstance()
 		if err = s.populate(obj, raw); err != nil {
-			return nil, nil, &errors.Error{
+			return nil, &errors.Error{
 				Op:  op,
 				Err: err,
 			}
@@ -116,7 +118,9 @@ func (s *gardbSchema[T]) Scan(ctx context.Context, config *ScanInput) ([]T, *Sca
 		results = append(results, obj)
 	}
 
-	return results, &ScanOutput{
-		NextToken: data.NextToken,
+	return &ScanOutput[T]{
+		Items:      results,
+		Limit:      config.Limit,
+		NextCursor: data.NextToken,
 	}, nil
 }

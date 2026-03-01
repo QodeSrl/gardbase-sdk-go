@@ -392,55 +392,138 @@ func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextT
 }
 
 func (c *APIClient) Query(ctx context.Context, tableHash string, iek []byte, indexName objects.IndexName, rangeOp objects.QueryOperator, hashValue any, rangeValue any, limit int, nextToken *string, scanForward bool) (QueryResult, error) {
+	// encrypt index with IEK
+	idx := objects.Index{
+		Name: indexName,
+	}
+	var context string
+	if indexName.RangeField != nil {
+		context = fmt.Sprintf("%s:%s:%s", tableHash, indexName.HashField, *indexName.RangeField)
+	} else {
+		context = fmt.Sprintf("%s:%s", tableHash, indexName.HashField)
+	}
+	hashValBytes, err := json.Marshal(hashValue)
+	if err != nil {
+		return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
+	}
+	encryptedHashVal, err := crypto.EncryptObjectDeterministicFixed(hashValBytes, context, iek)
+	if err != nil {
+		return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrEncryption, err)
+	}
+	idx.Token = encryptedHashVal
+	if indexName.RangeField != nil {
+		val, err := crypto.NormalizeValue(rangeValue)
+		if err != nil {
+			return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
+		}
+		encryptedRangeVal, err := crypto.EncryptObjectLinearOPE(val, iek)
+		if err != nil {
+			return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrEncryption, err)
+		}
+		token := make([]byte, 0, len(encryptedHashVal)+len(encryptedRangeVal))
+		token = append(token, encryptedHashVal...)
+		token = append(token, encryptedRangeVal...)
+		idx.Token = token
+	}
+
+	// Call the API
+	reqBody, err := json.Marshal(objects.QueryRequest{
+		TableHash:   tableHash,
+		Index:       idx,
+		RangeOp:     rangeOp,
+		Limit:       limit,
+		NextToken:   nextToken,
+		ScanForward: scanForward,
+	})
+	if err != nil {
+		return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", c.APIEndpoint+"/objects/query", bytes.NewReader(reqBody))
+	if err != nil {
+		return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return QueryResult{}, fmt.Errorf("%w: unauthorized access when querying table", errors.ErrUnauthorized)
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return QueryResult{}, fmt.Errorf("%w: rate limit exceeded when querying table", errors.ErrRateLimited)
+		}
+		return QueryResult{}, fmt.Errorf("%w: failed to query table, status code: %d", errors.ErrNetwork, resp.StatusCode)
+	}
+	respBody := objects.QueryResponse{}
+	err = json.NewDecoder(resp.Body).Decode(&respBody)
+	if err != nil {
+		return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+	}
+
+	var results QueryResult
+	for _, obj := range respBody.Objects {
+		getObjResult, err := c.ensureObjectBlob(ctx, obj)
+		if err != nil {
+			return QueryResult{}, fmt.Errorf("%w: failed to get object blob for object ID %s: %v", errors.ErrNetwork, obj.ObjectID, err)
+		}
+		results.Objects = append(results.Objects, *getObjResult)
+	}
+	results.Count = respBody.Count
+	results.NextToken = respBody.NextToken
+
+	return results, nil
 }
 
 func (c *APIClient) ensureObjectBlob(ctx context.Context, obj objects.ResultObject) (*GetObjectResult, error) {
-		var encryptedObj []byte
+	var encryptedObj []byte
 
-		if obj.GetURL == "" {
-			encryptedObj = obj.EncryptedBlob
-		} else {
-			// Download the encrypted object from S3
+	if obj.GetURL == "" {
+		encryptedObj = obj.EncryptedBlob
+	} else {
+		// Download the encrypted object from S3
 		req, err := http.NewRequestWithContext(ctx, "GET", obj.GetURL, nil)
-			if err != nil {
+		if err != nil {
 			return nil, fmt.Errorf("%w: %v", errors.ErrValidation, err)
-			}
-			req.Header.Set("Content-Type", "application/octet-stream")
+		}
+		req.Header.Set("Content-Type", "application/octet-stream")
 		resp, err := c.httpClient.Do(req)
-			if err != nil {
+		if err != nil {
 			return nil, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				if resp.StatusCode == http.StatusNotFound {
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			if resp.StatusCode == http.StatusNotFound {
 				return nil, fmt.Errorf("%w: object with ID %s not found in S3", errors.ErrNotFound, obj.ObjectID)
-				}
-				if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			}
+			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 				return nil, fmt.Errorf("%w: unauthorized access to object with ID %s in S3", errors.ErrUnauthorized, obj.ObjectID)
-				}
-				if resp.StatusCode == http.StatusTooManyRequests {
+			}
+			if resp.StatusCode == http.StatusTooManyRequests {
 				return nil, fmt.Errorf("%w: rate limit exceeded when accessing object with ID %s in S3", errors.ErrRateLimited, obj.ObjectID)
-				}
+			}
 			return nil, fmt.Errorf("%w: failed to get object from S3, status code: %d", errors.ErrNetwork, resp.StatusCode)
-			}
-
-			buf := new(bytes.Buffer)
-			_, err = buf.ReadFrom(resp.Body)
-			if err != nil {
-			return nil, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
-			}
-			encryptedObj = buf.Bytes()
 		}
 
-		// Build and return the result
+		buf := new(bytes.Buffer)
+		_, err = buf.ReadFrom(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+		}
+		encryptedObj = buf.Bytes()
+	}
+
+	// Build and return the result
 	return &GetObjectResult{
-			ObjectID:         obj.ObjectID,
-			EncryptedObj:     encryptedObj,
-			KMSWrappedDEK:    obj.KMSWrappedDEK,
-			MasterWrappedDEK: obj.MasterWrappedDEK,
-			DEKNonce:         obj.DEKNonce,
-			CreatedAt:        obj.CreatedAt,
-			UpdatedAt:        obj.UpdatedAt,
+		ObjectID:         obj.ObjectID,
+		EncryptedObj:     encryptedObj,
+		KMSWrappedDEK:    obj.KMSWrappedDEK,
+		MasterWrappedDEK: obj.MasterWrappedDEK,
+		DEKNonce:         obj.DEKNonce,
+		CreatedAt:        obj.CreatedAt,
+		UpdatedAt:        obj.UpdatedAt,
 	}, nil
 }
 
