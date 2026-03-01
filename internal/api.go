@@ -334,12 +334,13 @@ func (c *APIClient) Get(ctx context.Context, tableHash string, id string) (GetOb
 	}, nil
 }
 
-type ScanResult struct {
+type QueryResult struct {
 	NextToken *string
-	Results   []GetObjectResult
+	Count     int
+	Objects   []GetObjectResult
 }
 
-func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextToken *string) (ScanResult, error) {
+func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextToken *string) (QueryResult, error) {
 	// Call the API and get the list of objects
 	reqBody, err := json.Marshal(objects.ScanRequest{
 		TableHash: tableHash,
@@ -347,75 +348,92 @@ func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextT
 		NextToken: nextToken,
 	})
 	if err != nil {
-		return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
+		return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", c.APIEndpoint+"/objects/scan", bytes.NewReader(reqBody))
 	if err != nil {
-		return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
+		return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+		return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return ScanResult{}, fmt.Errorf("%w: unauthorized access", errors.ErrUnauthorized)
+			return QueryResult{}, fmt.Errorf("%w: unauthorized access", errors.ErrUnauthorized)
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
-			return ScanResult{}, fmt.Errorf("%w: rate limit exceeded when scanning table", errors.ErrRateLimited)
+			return QueryResult{}, fmt.Errorf("%w: rate limit exceeded when scanning table", errors.ErrRateLimited)
 		}
-		return ScanResult{}, fmt.Errorf("%w: failed to scan table, status code: %d", errors.ErrNetwork, resp.StatusCode)
+		return QueryResult{}, fmt.Errorf("%w: failed to scan table, status code: %d", errors.ErrNetwork, resp.StatusCode)
 	}
 	respBody := objects.ScanResponse{}
 	err = json.NewDecoder(resp.Body).Decode(&respBody)
 	if err != nil {
-		return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+		return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 	}
 
-	var results ScanResult
+	var results QueryResult
 
 	for _, obj := range respBody.Objects {
+		getObjResult, err := c.ensureObjectBlob(ctx, obj)
+		if err != nil {
+			return QueryResult{}, fmt.Errorf("%w: failed to get object blob for object ID %s: %v", errors.ErrNetwork, obj.ObjectID, err)
+		}
+		results.Objects = append(results.Objects, *getObjResult)
+	}
+
+	results.Count = respBody.Count
+	results.NextToken = respBody.NextToken
+
+	return results, nil
+}
+
+func (c *APIClient) Query(ctx context.Context, tableHash string, iek []byte, indexName objects.IndexName, rangeOp objects.QueryOperator, hashValue any, rangeValue any, limit int, nextToken *string, scanForward bool) (QueryResult, error) {
+}
+
+func (c *APIClient) ensureObjectBlob(ctx context.Context, obj objects.ResultObject) (*GetObjectResult, error) {
 		var encryptedObj []byte
 
 		if obj.GetURL == "" {
 			encryptedObj = obj.EncryptedBlob
 		} else {
 			// Download the encrypted object from S3
-			req, err = http.NewRequestWithContext(ctx, "GET", obj.GetURL, nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", obj.GetURL, nil)
 			if err != nil {
-				return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
+			return nil, fmt.Errorf("%w: %v", errors.ErrValidation, err)
 			}
 			req.Header.Set("Content-Type", "application/octet-stream")
-			resp, err = c.httpClient.Do(req)
+		resp, err := c.httpClient.Do(req)
 			if err != nil {
-				return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+			return nil, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusOK {
 				if resp.StatusCode == http.StatusNotFound {
-					return ScanResult{}, fmt.Errorf("%w: object with ID %s not found in S3", errors.ErrNotFound, obj.ObjectID)
+				return nil, fmt.Errorf("%w: object with ID %s not found in S3", errors.ErrNotFound, obj.ObjectID)
 				}
 				if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-					return ScanResult{}, fmt.Errorf("%w: unauthorized access to object with ID %s in S3", errors.ErrUnauthorized, obj.ObjectID)
+				return nil, fmt.Errorf("%w: unauthorized access to object with ID %s in S3", errors.ErrUnauthorized, obj.ObjectID)
 				}
 				if resp.StatusCode == http.StatusTooManyRequests {
-					return ScanResult{}, fmt.Errorf("%w: rate limit exceeded when accessing object with ID %s in S3", errors.ErrRateLimited, obj.ObjectID)
+				return nil, fmt.Errorf("%w: rate limit exceeded when accessing object with ID %s in S3", errors.ErrRateLimited, obj.ObjectID)
 				}
-				return ScanResult{}, fmt.Errorf("%w: failed to get object from S3, status code: %d", errors.ErrNetwork, resp.StatusCode)
+			return nil, fmt.Errorf("%w: failed to get object from S3, status code: %d", errors.ErrNetwork, resp.StatusCode)
 			}
 
 			buf := new(bytes.Buffer)
 			_, err = buf.ReadFrom(resp.Body)
 			if err != nil {
-				return ScanResult{}, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
+			return nil, fmt.Errorf("%w: %v", errors.ErrNetwork, err)
 			}
 			encryptedObj = buf.Bytes()
 		}
 
 		// Build and return the result
-		results.Results = append(results.Results, GetObjectResult{
+	return &GetObjectResult{
 			ObjectID:         obj.ObjectID,
 			EncryptedObj:     encryptedObj,
 			KMSWrappedDEK:    obj.KMSWrappedDEK,
@@ -423,11 +441,7 @@ func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextT
 			DEKNonce:         obj.DEKNonce,
 			CreatedAt:        obj.CreatedAt,
 			UpdatedAt:        obj.UpdatedAt,
-		})
-		results.NextToken = respBody.NextToken
-	}
-
-	return results, nil
+	}, nil
 }
 
 func (c *APIClient) Delete(ctx context.Context, tableHash string, objectId string) error {

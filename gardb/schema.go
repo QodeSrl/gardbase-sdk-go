@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 	"time"
 
 	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
@@ -73,6 +74,21 @@ func (s *gardbSchema[T]) Name() string {
 
 func (s *gardbSchema[T]) newInstance() T {
 	return reflect.New(s.typ).Interface().(T)
+}
+
+func (s *gardbSchema[T]) containsHashKey(field string) bool {
+	return slices.ContainsFunc(s.indexes, func(idx *objects.IndexName) bool {
+		return idx.HashField == field
+	})
+}
+
+func (s *gardbSchema[T]) containsHashAndRangeKey(hashField, rangeField string) bool {
+	if hashField == "" {
+		return false
+	}
+	return slices.ContainsFunc(s.indexes, func(idx *objects.IndexName) bool {
+		return idx.HashField == hashField && idx.RangeField != nil && *idx.RangeField == rangeField
+	})
 }
 
 // validate checks if the given struct pointer conforms to the schema definition (field names, types, required fields)
