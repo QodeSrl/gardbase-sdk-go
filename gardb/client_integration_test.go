@@ -210,20 +210,20 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 		t.Log("Scanning book table from Gardb...")
 
 		scanInput := &gardb.ScanInput{
-			Limit:     2,
-			NextToken: nil,
+			Limit:  2,
+			Cursor: nil,
 		}
 
-		books, _, err := bookSchema.Scan(ctx, scanInput)
+		out, err := bookSchema.Scan(ctx, scanInput)
 		if err != nil {
 			t.Fatalf("Failed to scan books: %v", err)
 		}
 
-		if len(books) != 2 {
+		if out.Count != 2 {
 			t.Fatalf("Expected at least one book in scan results")
 		}
 
-		t.Logf("Successfully scanned %d books (limited to 2)", len(books))
+		t.Logf("Successfully scanned %d books (limited to 2)", out.Count)
 	})
 
 	// Scan all objects with pagination
@@ -231,25 +231,25 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 		t.Log("Scanning all books with pagination...")
 
 		var allBooks []*Book
-		var nextToken *string
+		var nextCursor *string
 
 		for {
 			scanInput := &gardb.ScanInput{
-				Limit:     2,
-				NextToken: nextToken,
+				Limit:  2,
+				Cursor: nextCursor,
 			}
 
-			books, scanOutput, err := bookSchema.Scan(ctx, scanInput)
+			out, err := bookSchema.Scan(ctx, scanInput)
 			if err != nil {
 				t.Fatalf("Failed to scan books: %v", err)
 			}
 
-			allBooks = append(allBooks, books...)
+			allBooks = append(allBooks, out.Items...)
 
-			if scanOutput.NextToken == nil {
+			if out.NextCursor == nil {
 				break
 			}
-			nextToken = scanOutput.NextToken
+			nextCursor = out.NextCursor
 		}
 
 		if len(allBooks) != len(bookIds) {
@@ -279,13 +279,13 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 			Limit: 10,
 		}
 
-		results, _, err := emptySchema.Scan(ctx, scanInput)
+		out, err := emptySchema.Scan(ctx, scanInput)
 		if err != nil {
 			t.Fatalf("Failed to scan empty table: %v", err)
 		}
 
-		if len(results) != 0 {
-			t.Fatalf("Expected 0 records from empty table scan, got %d", len(results))
+		if out.Count != 0 {
+			t.Fatalf("Expected 0 records from empty table scan, got %d", out.Count)
 		}
 
 		t.Log("Successfully scanned empty table with 0 results")
