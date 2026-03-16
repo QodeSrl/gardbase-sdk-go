@@ -69,7 +69,7 @@ func (s *gardbSchema[T]) Put(ctx context.Context, obj T) error {
 	meta := obj.getGardbMeta()
 
 	// Call the API client's Put method to handle encryption and upload
-	respBody, err := s.client.apiClient.Put(ctx, values, indexes, deks[0], iek, s.name, s.tableHash, meta.ID, meta.Version)
+	respBody, err := s.client.apiClient.Put(ctx, values, indexes, deks[0], iek, s.tableHash, meta.ID, meta.Version)
 	if err != nil {
 		if internal.IsContextError(err) {
 			return &errors.Error{
