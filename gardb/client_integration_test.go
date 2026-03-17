@@ -402,13 +402,31 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 		t.Log("Deleted book not found in scan results, deletion verified")
 	})
 
+	t.Run("11_query_by_hash_index", func(t *testing.T) {
+		t.Log("Querying books by hash index (name)...")
+
+		out, err := bookSchema.Query(ctx).
+			Where("name", gardb.Eq("Clean Code")).
+			Execute()
+		if err != nil {
+			t.Fatalf("Failed to query books by name: %v", err)
+		}
+		if out.Count != 1 {
+			t.Fatalf("Expected 1 book with name 'Clean Code', got %d", out.Count)
+		}
+		if out.Items[0].Author != "Robert C. Martin" {
+			t.Errorf("Expected author 'Robert C. Martin' for book 'Clean Code', got '%s'", out.Items[0].Author)
+		}
+		t.Logf("Successfully queried book by name: %+v", out.Items[0])
+	})
+
 	// Large object
-	t.Run("11_large_object", func(t *testing.T) {
+	t.Run("12_large_object", func(t *testing.T) {
 		t.Skip("Skipping large object test to avoid long execution time in CI")
 	})
 
 	// Concurrent operations
-	t.Run("12_concurrent_operations", func(t *testing.T) {
+	t.Run("13_concurrent_operations", func(t *testing.T) {
 		t.Skip("TODO")
 		t.Log("Testing concurrent PUT operations...")
 
@@ -441,7 +459,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 	})
 
 	// invalid operations
-	t.Run("13_error_handling", func(t *testing.T) {
+	t.Run("14_error_handling", func(t *testing.T) {
 		t.Skip("Skipping error handling test, not everything implemented yet")
 		t.Log("Testing error handling...")
 
