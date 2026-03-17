@@ -385,17 +385,16 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 
 	// Verify deletion via scan
 	t.Run("10_verify_deletion_via_scan", func(t *testing.T) {
-		t.Skip("Skipping verify deletion test, not implemented yet")
 		t.Log("Verifying deletion via scan...")
 		scanInput := &gardb.ScanInput{
-			Limit:     10,
-			NextToken: nil,
+			Limit:  10,
+			Cursor: nil,
 		}
-		books, _, err := bookSchema.Scan(ctx, scanInput)
+		out, err := bookSchema.Scan(ctx, scanInput)
 		if err != nil {
 			t.Fatalf("Failed to scan books: %v", err)
 		}
-		for _, b := range books {
+		for _, b := range out.Items {
 			if b.GardbMeta.ID == bookIds[0] {
 				t.Fatalf("Deleted book with ID %s still found in scan results", bookIds[0])
 			}

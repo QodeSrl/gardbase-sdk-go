@@ -17,6 +17,7 @@ type ScanInput struct {
 
 type ScanOutput[T GardbObject] struct {
 	Items      []T
+	Count      int
 	Limit      int
 	NextCursor *string
 }
@@ -122,5 +123,6 @@ func (s *gardbSchema[T]) Scan(ctx context.Context, config *ScanInput) (*ScanOutp
 		Items:      results,
 		Limit:      config.Limit,
 		NextCursor: data.NextToken,
+		Count:      data.Count,
 	}, nil
 }
