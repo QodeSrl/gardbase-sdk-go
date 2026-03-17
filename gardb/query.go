@@ -97,7 +97,12 @@ func (qb *QueryBuilder[T]) Execute() (*QueryOutput[T], error) {
 		HashField:  qb.hashKey,
 		RangeField: &qb.rangeKey,
 	}
-	data, err := qb.schema.client.apiClient.Query(qb.ctx, qb.schema.tableHash, qb.schema.tableIEK, indexName, qb.rangeOp, qb.hashValue, qb.rangeValue, qb.limit, qb.cursor, qb.scanForward)
+	index := internal.Index{
+		Name:       indexName,
+		HashValue:  qb.hashValue,
+		RangeValue: qb.rangeValue,
+	}
+	data, err := qb.schema.client.apiClient.Query(qb.ctx, qb.schema.tableHash, qb.schema.tableIEK, index, qb.rangeOp, qb.limit, qb.cursor, qb.scanForward)
 	if err != nil {
 		if internal.IsContextError(err) {
 			return nil, &errors.Error{

@@ -47,7 +47,7 @@ func (c *APIClient) Put(ctx context.Context, values map[string]any, indexes []In
 
 	// Encrypt indexes with IEK
 	encryptedIndexes, err := EncryptIndexes(indexes, tableHash, iek)
-		if err != nil {
+	if err != nil {
 		return PutObjectResult{}, err
 	}
 
@@ -355,45 +355,17 @@ func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextT
 	return results, nil
 }
 
-func (c *APIClient) Query(ctx context.Context, tableHash string, iek []byte, indexName objects.IndexName, rangeOp objects.QueryOperator, hashValue any, rangeValue any, limit int, nextToken *string, scanForward bool) (QueryResult, error) {
+func (c *APIClient) Query(ctx context.Context, tableHash string, iek []byte, index Index, rangeOp objects.QueryOperator, limit int, nextToken *string, scanForward bool) (QueryResult, error) {
 	// encrypt index with IEK
-	idx := objects.Index{
-		Name: indexName,
-	}
-	var context string
-	if indexName.RangeField != nil {
-		context = fmt.Sprintf("%s:%s:%s", tableHash, indexName.HashField, *indexName.RangeField)
-	} else {
-		context = fmt.Sprintf("%s:%s", tableHash, indexName.HashField)
-	}
-	hashValBytes, err := json.Marshal(hashValue)
+	idxNoObjectID, err := EncryptIndex(index, tableHash, iek)
 	if err != nil {
-		return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
-	}
-	encryptedHashVal, err := crypto.EncryptObjectDeterministicFixed(hashValBytes, context, iek)
-	if err != nil {
-		return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrEncryption, err)
-	}
-	idx.Token = encryptedHashVal
-	if indexName.RangeField != nil {
-		val, err := crypto.NormalizeValue(rangeValue)
-		if err != nil {
-			return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
-		}
-		encryptedRangeVal, err := crypto.EncryptObjectLinearOPE(val, iek)
-		if err != nil {
-			return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrEncryption, err)
-		}
-		token := make([]byte, 0, len(encryptedHashVal)+len(encryptedRangeVal))
-		token = append(token, encryptedHashVal...)
-		token = append(token, encryptedRangeVal...)
-		idx.Token = token
+		return QueryResult{}, err
 	}
 
 	// Call the API
 	reqBody, err := json.Marshal(objects.QueryRequest{
 		TableHash:   tableHash,
-		Index:       idx,
+		Index:       idxNoObjectID,
 		RangeOp:     rangeOp,
 		Limit:       limit,
 		NextToken:   nextToken,
