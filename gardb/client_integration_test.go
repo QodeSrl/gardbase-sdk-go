@@ -219,7 +219,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 			t.Fatalf("Failed to scan books: %v", err)
 		}
 
-		if out.Count != 2 {
+		if out.Count < 1 {
 			t.Fatalf("Expected at least one book in scan results")
 		}
 

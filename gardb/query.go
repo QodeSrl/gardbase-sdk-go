@@ -97,6 +97,9 @@ func (qb *QueryBuilder[T]) Execute() (*QueryOutput[T], error) {
 		HashField:  qb.hashKey,
 		RangeField: &qb.rangeKey,
 	}
+	if qb.rangeKey == "" {
+		indexName.RangeField = nil
+	}
 	index := internal.Index{
 		Name:       indexName,
 		HashValue:  qb.hashValue,
