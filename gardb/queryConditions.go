@@ -28,5 +28,5 @@ func Gte(val any) QueryCondition {
 }
 
 func Between(val1, val2 any) QueryCondition {
-	return QueryCondition{Op: objects.RangeBetween, Value: []any{val1, val2}}
+	return QueryCondition{Op: objects.RangeBetween, Value: [2]any{val1, val2}}
 }

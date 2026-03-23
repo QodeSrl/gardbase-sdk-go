@@ -80,3 +80,56 @@ func EncryptIndexes(indexes []Index, schemaName string, iek []byte) ([]objects.I
 	}
 	return encryptedIndexes, nil
 }
+
+func EncryptIndexForBetweenRange(index Index, tableHash string, betweenRange [2]any, iek []byte) (objects.Index, [2][]byte, error) {
+	idx := objects.Index{
+		Name:  index.Name,
+		Token: nil,
+	}
+	var context string
+	var indexNameForErrors string
+	tokenLength := 0
+	if index.Name.RangeField != nil {
+		context = fmt.Sprintf("%s:%s:%s", tableHash, index.Name.HashField, *index.Name.RangeField)
+		indexNameForErrors = fmt.Sprintf("%s:%s", index.Name.HashField, *index.Name.RangeField)
+	} else {
+		context = fmt.Sprintf("%s:%s", tableHash, index.Name.HashField)
+		indexNameForErrors = index.Name.HashField
+	}
+	// encrypt hash value with det enc using IEK
+	hashValBytes, err := json.Marshal(index.HashValue)
+	if err != nil {
+		return idx, [2][]byte{}, fmt.Errorf("%w: (index %s) failed to marshal hash value: %v", gardbErrors.ErrValidation, indexNameForErrors, err)
+	}
+	encryptedHashVal, err := crypto.EncryptObjectDeterministicFixed(hashValBytes, context, iek)
+	if err != nil {
+		return idx, [2][]byte{}, fmt.Errorf("%w: (index %s) failed to encrypt hash value: %v", gardbErrors.ErrEncryption, indexNameForErrors, err)
+	}
+	tokenLength += len(encryptedHashVal)
+
+	encryptedBetweenRange := [2][]byte{}
+	if index.Name.RangeField != nil {
+		for i, val := range betweenRange {
+			normalizedVal, err := crypto.NormalizeValue(val)
+			if err != nil {
+				return idx, [2][]byte{}, fmt.Errorf("%w: (index %s) failed to normalize between range value: %v", gardbErrors.ErrValidation, indexNameForErrors, err)
+			}
+			encryptedVal, err := crypto.EncryptObjectLinearOPE(normalizedVal, iek)
+			if err != nil {
+				return idx, [2][]byte{}, fmt.Errorf("%w: (index %s) failed to encrypt between range value: %v", gardbErrors.ErrEncryption, indexNameForErrors, err)
+			}
+			encryptedBetweenRange[i] = encryptedVal
+			tokenLength += len(encryptedVal)
+		}
+	}
+
+	token1 := make([]byte, 0, tokenLength)
+	token1 = append(token1, encryptedHashVal...)
+	token1 = append(token1, encryptedBetweenRange[0]...)
+
+	token2 := make([]byte, 0, tokenLength)
+	token2 = append(token2, encryptedHashVal...)
+	token2 = append(token2, encryptedBetweenRange[1]...)
+
+	return idx, [2][]byte{token1, token2}, nil
+}

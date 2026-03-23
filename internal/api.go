@@ -356,21 +356,38 @@ func (c *APIClient) Scan(ctx context.Context, tableHash string, limit int, nextT
 }
 
 func (c *APIClient) Query(ctx context.Context, tableHash string, iek []byte, index Index, rangeOp objects.QueryOperator, limit int, nextToken *string, scanForward bool) (QueryResult, error) {
-	// encrypt index with IEK
-	idxNoObjectID, err := EncryptIndex(index, tableHash, iek)
-	if err != nil {
-		return QueryResult{}, err
-	}
 
-	// Call the API
-	reqBody, err := json.Marshal(objects.QueryRequest{
+	queryReq := objects.QueryRequest{
 		TableHash:   tableHash,
-		Index:       idxNoObjectID,
 		RangeOp:     rangeOp,
 		Limit:       limit,
 		NextToken:   nextToken,
 		ScanForward: scanForward,
-	})
+	}
+
+	if rangeOp == objects.RangeBetween {
+		rangeValues, ok := index.RangeValue.([2]any)
+		if !ok {
+			return QueryResult{}, fmt.Errorf("%w: for RangeBetween operator, RangeValue must be of type [2]any", errors.ErrValidation)
+		}
+		emptyIdx, betweenRange, err := EncryptIndexForBetweenRange(index, tableHash, rangeValues, iek)
+		if err != nil {
+			return QueryResult{}, err
+		}
+		queryReq.Index = emptyIdx
+		queryReq.BetweenRange = betweenRange
+	} else {
+		// encrypt index with IEK
+		idxNoObjectID, err := EncryptIndex(index, tableHash, iek)
+		if err != nil {
+			return QueryResult{}, err
+		}
+		queryReq.Index = idxNoObjectID
+		queryReq.BetweenRange = [2][]byte{nil, nil}
+	}
+
+	// Call the API
+	reqBody, err := json.Marshal(queryReq)
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("%w: %v", errors.ErrValidation, err)
 	}
