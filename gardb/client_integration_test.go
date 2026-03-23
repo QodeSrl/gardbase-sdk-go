@@ -85,6 +85,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 	}
 
 	var bookIds []string
+	var deletedBookIds []string
 
 	bookSchema, err := gardb.Schema[*Book](ctx, client, "book",
 		gardb.Model{
@@ -153,6 +154,14 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 				Pages:       448,
 				PublishedAt: time.Date(2018, 11, 20, 0, 0, 0, 0, time.UTC),
 				ISBN:        "978-0134757599",
+				InStock:     true,
+			},
+			{
+				Name:        "Domain Specific Languages",
+				Author:      "Martin Fowler",
+				Pages:       560,
+				PublishedAt: time.Date(2010, 11, 1, 0, 0, 0, 0, time.UTC),
+				ISBN:        "978-0321712943",
 				InStock:     true,
 			},
 		}
@@ -380,6 +389,9 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 			t.Fatalf("Expected error when updating deleted book, got none")
 		}
 
+		deletedBookIds = append(deletedBookIds, bookIds[0])
+		bookIds = bookIds[1:] // remove deleted book ID from list of existing books
+
 		t.Log("Successfully deleted book and verified it cannot be retrieved")
 	})
 
@@ -395,8 +407,8 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 			t.Fatalf("Failed to scan books: %v", err)
 		}
 		for _, b := range out.Items {
-			if b.GardbMeta.ID == bookIds[0] {
-				t.Fatalf("Deleted book with ID %s still found in scan results", bookIds[0])
+			if b.GardbMeta.ID == deletedBookIds[0] {
+				t.Fatalf("Deleted book with ID %s still found in scan results", deletedBookIds[0])
 			}
 		}
 		t.Log("Deleted book not found in scan results, deletion verified")
@@ -420,13 +432,37 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 		t.Logf("Successfully queried book by name: %+v", out.Items[0])
 	})
 
+	t.Run("12_query_by_hash_and_range_index", func(t *testing.T) {
+		t.Log("Querying books by hash and range index (author and published_at)...")
+
+		out, err := bookSchema.Query(ctx).
+			Where("author", gardb.Eq("Martin Fowler")).
+			WhereRange("published_at", gardb.Gt(time.Date(2011, 1, 1, 0, 0, 0, 0, time.UTC))).
+			OrderBy(true).
+			Execute()
+
+		if err != nil {
+			t.Fatalf("Failed to query books by author and published_at: %v", err)
+		}
+
+		if out.Count != 1 {
+			t.Fatalf("Expected 1 book by Martin Fowler published after 2011, got %d", out.Count)
+		}
+
+		if out.Items[0].Name != "Refactoring" {
+			t.Errorf("Expected book 'Refactoring' for Martin Fowler published after 2011, got '%s'", out.Items[0].Name)
+		}
+
+		t.Logf("Successfully queried book by author and published_at: %+v", out.Items[0])
+	})
+
 	// Large object
-	t.Run("12_large_object", func(t *testing.T) {
+	t.Run("13_large_object", func(t *testing.T) {
 		t.Skip("Skipping large object test to avoid long execution time in CI")
 	})
 
 	// Concurrent operations
-	t.Run("13_concurrent_operations", func(t *testing.T) {
+	t.Run("14_concurrent_operations", func(t *testing.T) {
 		t.Skip("TODO")
 		t.Log("Testing concurrent PUT operations...")
 
@@ -459,7 +495,7 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 	})
 
 	// invalid operations
-	t.Run("14_error_handling", func(t *testing.T) {
+	t.Run("15_error_handling", func(t *testing.T) {
 		t.Skip("Skipping error handling test, not everything implemented yet")
 		t.Log("Testing error handling...")
 
@@ -492,5 +528,17 @@ func TestIntegration_PutGetWorkflow(t *testing.T) {
 			t.Error("Expected error when putting object with missing required fields")
 		}
 		t.Log("Put with missing required field returned error")
+	})
+
+	// Cleanup
+	t.Run("99_cleanup", func(t *testing.T) {
+		t.Log("Cleaning up created objects...")
+
+		for _, id := range bookIds {
+			if err := bookSchema.Delete(ctx, id); err != nil {
+				t.Errorf("Failed to delete book with ID %s: %v", id, err)
+			}
+		}
+		t.Logf("Deleted %d books", len(bookIds))
 	})
 }
