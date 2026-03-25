@@ -212,10 +212,25 @@ func (s *gardbSchema[T]) populate(obj T, raw map[string]any) error {
 		switch schemaField.Typ {
 		case schema.TimeType:
 			switch v := rawVal.(type) {
-			case float64:
-				field.Set(reflect.ValueOf(time.Unix(int64(v), 0).UTC()))
+			case time.Time:
+				field.Set(reflect.ValueOf(v.UTC()))
+			case string:
+				// fallback: ISO8601 string
+				t, err := time.Parse(time.RFC3339, v)
+				if err != nil {
+					return &errors.Error{
+						Op:    op,
+						Field: tag,
+						Err:   fmt.Errorf("%w: invalid time string format", errors.ErrValidation),
+					}
+				}
+				field.Set(reflect.ValueOf(t.UTC()))
 			default:
-				return &errors.Error{Op: op, Field: tag, Err: fmt.Errorf("%w: expected time field to be a number (Unix timestamp)", errors.ErrValidation)}
+				return &errors.Error{
+					Op:    op,
+					Field: tag,
+					Err:   fmt.Errorf("%w: unsupported type %T for time field", errors.ErrValidation, v),
+				}
 			}
 		case schema.IntegerType:
 			// JSON numbers are always float64

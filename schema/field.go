@@ -130,8 +130,7 @@ func (f *Field) ExtractIntoValues(val reflect.Value, values *map[string]any, val
 		}
 		if f.Typ == TimeType {
 			t := val.Interface().(time.Time)
-			unix := t.Unix()
-			(*values)[tag] = unix
+			(*values)[tag] = t.UTC()
 		} else {
 			(*values)[tag] = val.Interface()
 		}
