@@ -37,7 +37,7 @@ type ScanOutput[T GardbObject] struct {
 //   - A slice of objects of type T containing the decrypted and unmarshalled data
 //   - A ScanOutput containing the next pagination token if more results are available
 //   - An error if any step of the retrieval, decryption, or unmarshalling process fails, or if the context is cancelled/times out
-func (s *gardbSchema[T]) Scan(ctx context.Context, config *ScanInput) (*ScanOutput[T], error) {
+func (s *GardbSchema[T]) Scan(ctx context.Context, config *ScanInput) (*ScanOutput[T], error) {
 	const op = "Schema.Scan"
 
 	data, err := s.client.apiClient.Scan(ctx, s.tableHash, config.Limit, config.Cursor)

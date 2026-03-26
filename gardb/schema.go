@@ -13,7 +13,7 @@ import (
 	"github.com/QodeSrl/gardbase/pkg/api/objects"
 )
 
-type gardbSchema[T GardbObject] struct {
+type GardbSchema[T GardbObject] struct {
 	name       string
 	tableHash  string
 	tableIEK   []byte
@@ -32,7 +32,7 @@ type GardbBase struct {
 	GardbMeta
 }
 
-func (s *gardbSchema[T]) ensureTableIEK(ctx context.Context) error {
+func (s *GardbSchema[T]) ensureTableIEK(ctx context.Context) error {
 	const op = "Schema.ensureTableIEK"
 
 	if s.tableIEK != nil {
@@ -68,21 +68,21 @@ type Model map[string]*schema.Field // schema.String(), schema.Int(), etc.
 type Indexes []*objects.IndexName
 
 // Name returns the name of the schema
-func (s *gardbSchema[T]) Name() string {
+func (s *GardbSchema[T]) Name() string {
 	return s.name
 }
 
-func (s *gardbSchema[T]) newInstance() T {
+func (s *GardbSchema[T]) newInstance() T {
 	return reflect.New(s.typ).Interface().(T)
 }
 
-func (s *gardbSchema[T]) containsHashKey(field string) bool {
+func (s *GardbSchema[T]) containsHashKey(field string) bool {
 	return slices.ContainsFunc(s.indexes, func(idx *objects.IndexName) bool {
 		return idx.HashField == field
 	})
 }
 
-func (s *gardbSchema[T]) containsHashAndRangeKey(hashField, rangeField string) bool {
+func (s *GardbSchema[T]) containsHashAndRangeKey(hashField, rangeField string) bool {
 	if hashField == "" {
 		return false
 	}
@@ -92,7 +92,7 @@ func (s *gardbSchema[T]) containsHashAndRangeKey(hashField, rangeField string) b
 }
 
 // validate checks if the given struct pointer conforms to the schema definition (field names, types, required fields)
-func (s *gardbSchema[T]) validate(op string, obj T) error {
+func (s *GardbSchema[T]) validate(op string, obj T) error {
 	rv := reflect.ValueOf(obj).Elem()
 	rt := rv.Type()
 
@@ -141,7 +141,7 @@ func (s *gardbSchema[T]) validate(op string, obj T) error {
 }
 
 // extract takes a struct pointer and extracts field values into a values map and an indexes map, applying default values and checking required fields
-func (s *gardbSchema[T]) extract(obj T) (values map[string]any, indexes []internal.Index, err error) {
+func (s *GardbSchema[T]) extract(obj T) (values map[string]any, indexes []internal.Index, err error) {
 	const op = "Schema.Extract"
 	valErrors := &errors.ValidationErrors{Op: op}
 
@@ -189,7 +189,7 @@ func (s *gardbSchema[T]) extract(obj T) (values map[string]any, indexes []intern
 }
 
 // populate takes a struct pointer and populates its fields from the given raw map, converting types as needed (e.g. time fields)
-func (s *gardbSchema[T]) populate(obj T, raw map[string]any) error {
+func (s *GardbSchema[T]) populate(obj T, raw map[string]any) error {
 	const op = "Schema.populate"
 	rv := reflect.ValueOf(obj).Elem()
 	rt := rv.Type()

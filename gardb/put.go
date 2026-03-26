@@ -21,7 +21,7 @@ import (
 //
 // Returns:
 //   - An error if any step of the validation, encryption, or upload process fails, or if the context is cancelled/times out
-func (s *gardbSchema[T]) Put(ctx context.Context, obj T) error {
+func (s *GardbSchema[T]) Put(ctx context.Context, obj T) error {
 	const op = "Schema.Put"
 
 	if err := ctx.Err(); err != nil {

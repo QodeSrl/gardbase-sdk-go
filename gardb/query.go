@@ -12,7 +12,7 @@ import (
 )
 
 type QueryBuilder[T GardbObject] struct {
-	schema      *gardbSchema[T]
+	schema      *GardbSchema[T]
 	ctx         context.Context
 	hashKey     string
 	hashValue   any
@@ -30,7 +30,7 @@ type QueryOutput[T GardbObject] struct {
 	NextCursor *string
 }
 
-func (s *gardbSchema[T]) Query(ctx context.Context) *QueryBuilder[T] {
+func (s *GardbSchema[T]) Query(ctx context.Context) *QueryBuilder[T] {
 	return &QueryBuilder[T]{
 		schema:      s,
 		ctx:         ctx,

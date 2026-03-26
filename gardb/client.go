@@ -148,7 +148,7 @@ func (c *Client) Close() error {
 	return c.enclaveClient.Close()
 }
 
-func Schema[T GardbObject](ctx context.Context, client *Client, name string, model Model, indexes Indexes) (*gardbSchema[T], error) {
+func Schema[T GardbObject](ctx context.Context, client *Client, name string, model Model, indexes Indexes) (*GardbSchema[T], error) {
 	const op = "Schema"
 
 	if name == "" {
@@ -228,7 +228,7 @@ func Schema[T GardbObject](ctx context.Context, client *Client, name string, mod
 		tableHash = hash
 	}
 
-	s := &gardbSchema[T]{
+	s := &GardbSchema[T]{
 		name:       name,
 		tableHash:  tableHash.(string),
 		fields:     fields,

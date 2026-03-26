@@ -8,7 +8,7 @@ import (
 	"github.com/QodeSrl/gardbase-sdk-go/internal"
 )
 
-func (s *gardbSchema[T]) Recover(ctx context.Context, id string) error {
+func (s *GardbSchema[T]) Recover(ctx context.Context, id string) error {
 	const op = "Schema.Recover"
 
 	err := s.client.apiClient.Recover(ctx, s.tableHash, id)

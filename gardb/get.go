@@ -25,7 +25,7 @@ import (
 // Returns:
 //   - An object of type T containing the decrypted and unmarshalled data
 //   - An error if any step of the retrieval or decryption process fails, or if the context is cancelled/times out
-func (s *gardbSchema[T]) Get(ctx context.Context, id string) (T, error) {
+func (s *GardbSchema[T]) Get(ctx context.Context, id string) (T, error) {
 	const op = "Schema.Get"
 
 	var obj T

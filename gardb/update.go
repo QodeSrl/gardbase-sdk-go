@@ -35,7 +35,7 @@ func WithRetryDelay(d time.Duration) UpdateOption {
 	}
 }
 
-func (s *gardbSchema[T]) Update(ctx context.Context, id string, mutateFn func(dest T) error, opts ...UpdateOption) (T, error) {
+func (s *GardbSchema[T]) Update(ctx context.Context, id string, mutateFn func(dest T) error, opts ...UpdateOption) (T, error) {
 	const op = "Schema.Update"
 
 	options := defaultUpdateOption()

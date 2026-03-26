@@ -8,7 +8,7 @@ import (
 	"github.com/QodeSrl/gardbase-sdk-go/internal"
 )
 
-func (s *gardbSchema[T]) Delete(ctx context.Context, id string) error {
+func (s *GardbSchema[T]) Delete(ctx context.Context, id string) error {
 	const op = "Schema.Delete"
 
 	err := s.client.apiClient.Delete(ctx, s.tableHash, id)
