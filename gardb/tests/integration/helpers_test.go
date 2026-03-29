@@ -22,9 +22,9 @@ type Book struct {
 	Name        string    `gardb:"name"`
 	Author      string    `gardb:"author"`
 	Pages       int       `gardb:"pages"`
-	PublishedAt time.Time `gardb:"publishedAt"`
+	PublishedAt time.Time `gardb:"published_at"`
 	ISBN        string    `gardb:"isbn"`
-	InStock     bool      `gardb:"inStock"`
+	InStock     bool      `gardb:"in_stock"`
 }
 
 type LargeDocument struct {
