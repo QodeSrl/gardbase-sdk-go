@@ -185,3 +185,75 @@ func TestQuery_CompositeIndex(t *testing.T) {
 		}
 	})
 }
+
+func TestQuery_Pagination(t *testing.T) {
+	fixture := Setup(t)
+	bookSchema := fixture.CreateBookSchema(t)
+
+	books := make([]Book, 10)
+	ids := make([]string, 10)
+	for i := range books {
+		books[i] = Book{
+			Name:        "Book " + string(rune('A'+i)),
+			Author:      "Same Author",
+			Pages:       100 + i*10,
+			PublishedAt: time.Date(2020+i, 1, 1, 0, 0, 0, 0, time.UTC),
+			ISBN:        string(rune('1'+i)) + "00",
+			InStock:     true,
+		}
+		bookSchema.Put(fixture.Ctx, &books[i])
+		ids[i] = books[i].ID
+	}
+	defer func() {
+		for _, id := range ids {
+			bookSchema.Delete(fixture.Ctx, id)
+		}
+	}()
+
+	t.Run("paginate_through_results", func(t *testing.T) {
+		allItems := []*Book{}
+		var cursor *string
+
+		for {
+			builder := bookSchema.Query(fixture.Ctx).
+				Where("author", gardb.Eq("Same Author")).
+				Limit(3)
+
+			if cursor != nil {
+				builder = builder.StartFrom(*cursor)
+			}
+
+			result, err := builder.Execute()
+			if err != nil {
+				t.Fatalf("Failed to execute paginated query: %v", err)
+			}
+
+			allItems = append(allItems, result.Items...)
+			if result.NextCursor == nil {
+				break
+			}
+			cursor = result.NextCursor
+		}
+
+		if len(allItems) != 10 {
+			t.Fatalf("Expected to retrieve 10 items, got %d", len(allItems))
+		}
+	})
+
+	t.Run("limit_respected", func(t *testing.T) {
+		result, err := bookSchema.Query(fixture.Ctx).
+			Where("author", gardb.Eq("Same Author")).
+			Limit(5).
+			Execute()
+
+		if err != nil {
+			t.Fatalf("Failed to execute limited query: %v", err)
+		}
+		if result.Count != 5 {
+			t.Fatalf("Expected 5 results, got %d", result.Count)
+		}
+		if result.NextCursor == nil {
+			t.Fatal("Expected next cursor for more results, got nil")
+		}
+	})
+}
