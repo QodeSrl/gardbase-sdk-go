@@ -370,11 +370,11 @@ func (c *APIClient) Query(ctx context.Context, tableHash string, iek []byte, ind
 		if !ok {
 			return QueryResult{}, fmt.Errorf("%w: for RangeBetween operator, RangeValue must be of type [2]any", errors.ErrValidation)
 		}
-		emptyIdx, betweenRange, err := EncryptIndexForBetweenRange(index, tableHash, rangeValues, iek)
+		idx, betweenRange, err := EncryptIndexForBetweenRange(index, tableHash, rangeValues, iek)
 		if err != nil {
 			return QueryResult{}, err
 		}
-		queryReq.Index = emptyIdx
+		queryReq.Index = idx
 		queryReq.BetweenRange = betweenRange
 	} else {
 		// encrypt index with IEK

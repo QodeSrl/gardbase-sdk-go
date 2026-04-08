@@ -60,12 +60,9 @@ func EncryptIndex(index Index, tableHash string, iek []byte) (objects.Index, err
 		tokenLength += len(encryptedRangeVal)
 	}
 
-	token := make([]byte, 0, tokenLength)
+	idx.TokenHash = encryptedHashVal
+	idx.TokenRange = encryptedRangeVal
 
-	token = append(token, encryptedHashVal...)
-	token = append(token, encryptedRangeVal...)
-
-	idx.Token = token
 	return idx, nil
 }
 
@@ -83,8 +80,7 @@ func EncryptIndexes(indexes []Index, schemaName string, iek []byte) ([]objects.I
 
 func EncryptIndexForBetweenRange(index Index, tableHash string, betweenRange [2]any, iek []byte) (objects.Index, [2][]byte, error) {
 	idx := objects.Index{
-		Name:  index.Name,
-		Token: nil,
+		Name: index.Name,
 	}
 	var context string
 	var indexNameForErrors string
@@ -123,13 +119,7 @@ func EncryptIndexForBetweenRange(index Index, tableHash string, betweenRange [2]
 		}
 	}
 
-	token1 := make([]byte, 0, tokenLength)
-	token1 = append(token1, encryptedHashVal...)
-	token1 = append(token1, encryptedBetweenRange[0]...)
+	idx.TokenHash = encryptedHashVal
 
-	token2 := make([]byte, 0, tokenLength)
-	token2 = append(token2, encryptedHashVal...)
-	token2 = append(token2, encryptedBetweenRange[1]...)
-
-	return idx, [2][]byte{token1, token2}, nil
+	return idx, [2][]byte{encryptedBetweenRange[0], encryptedBetweenRange[1]}, nil
 }
