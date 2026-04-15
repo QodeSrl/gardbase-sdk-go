@@ -32,7 +32,7 @@ func TestQuery_HashIndex(t *testing.T) {
 	}()
 
 	t.Run("query_single_result", func(t *testing.T) {
-		result, err := bookSchema.Query(fixture.Ctx).Where("name", gardb.Eq("Refactoring")).Execute()
+		result, err := bookSchema.Query(fixture.Ctx).WhereHash("name", gardb.Eq("Refactoring")).Execute()
 
 		if err != nil {
 			t.Fatalf("Failed to execute query: %v", err)
@@ -46,7 +46,7 @@ func TestQuery_HashIndex(t *testing.T) {
 	})
 
 	t.Run("query_multiple_results_same_value", func(t *testing.T) {
-		result, err := bookSchema.Query(fixture.Ctx).Where("name", gardb.Eq("Clean Code")).Execute()
+		result, err := bookSchema.Query(fixture.Ctx).WhereHash("name", gardb.Eq("Clean Code")).Execute()
 
 		if err != nil {
 			t.Fatalf("Failed to execute query: %v", err)
@@ -66,7 +66,7 @@ func TestQuery_HashIndex(t *testing.T) {
 	})
 
 	t.Run("query_no_results", func(t *testing.T) {
-		result, err := bookSchema.Query(fixture.Ctx).Where("name", gardb.Eq("nonexistent")).Execute()
+		result, err := bookSchema.Query(fixture.Ctx).WhereHash("name", gardb.Eq("nonexistent")).Execute()
 
 		if err != nil {
 			t.Fatalf("Query failed: %v", err)
@@ -77,7 +77,7 @@ func TestQuery_HashIndex(t *testing.T) {
 	})
 
 	t.Run("query_by_isbn", func(t *testing.T) {
-		result, err := bookSchema.Query(fixture.Ctx).Where("isbn", gardb.Eq("111")).Execute()
+		result, err := bookSchema.Query(fixture.Ctx).WhereHash("isbn", gardb.Eq("111")).Execute()
 
 		if err != nil {
 			t.Fatalf("Failed to execute query: %v", err)
@@ -113,7 +113,7 @@ func TestQuery_CompositeIndex(t *testing.T) {
 
 	t.Run("composite_query_greater_than", func(t *testing.T) {
 		result, err := bookSchema.Query(fixture.Ctx).
-			Where("author", gardb.Eq("Martin Fowler")).
+			WhereHash("author", gardb.Eq("Martin Fowler")).
 			WhereRange("published_at", gardb.Gt(time.Date(2012, 1, 1, 0, 0, 0, 0, time.UTC))).
 			Execute()
 
@@ -127,7 +127,7 @@ func TestQuery_CompositeIndex(t *testing.T) {
 
 	t.Run("composite_query_less_than", func(t *testing.T) {
 		result, err := bookSchema.Query(fixture.Ctx).
-			Where("author", gardb.Eq("Martin Fowler")).
+			WhereHash("author", gardb.Eq("Martin Fowler")).
 			WhereRange("published_at", gardb.Lt(time.Date(2012, 1, 1, 0, 0, 0, 0, time.UTC))).
 			Execute()
 
@@ -141,7 +141,7 @@ func TestQuery_CompositeIndex(t *testing.T) {
 
 	t.Run("composite_query_between", func(t *testing.T) {
 		result, err := bookSchema.Query(fixture.Ctx).
-			Where("author", gardb.Eq("Martin Fowler")).
+			WhereHash("author", gardb.Eq("Martin Fowler")).
 			WhereRange("published_at", gardb.Between(
 				time.Date(2008, 1, 1, 0, 0, 0, 0, time.UTC),
 				time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -158,7 +158,7 @@ func TestQuery_CompositeIndex(t *testing.T) {
 
 	t.Run("composite_query_with_ordering", func(t *testing.T) {
 		resultAsc, err := bookSchema.Query(fixture.Ctx).
-			Where("author", gardb.Eq("Martin Fowler")).
+			WhereHash("author", gardb.Eq("Martin Fowler")).
 			OrderBy(true).
 			Execute()
 
@@ -173,7 +173,7 @@ func TestQuery_CompositeIndex(t *testing.T) {
 		}
 
 		resultDesc, err := bookSchema.Query(fixture.Ctx).
-			Where("author", gardb.Eq("Martin Fowler")).
+			WhereHash("author", gardb.Eq("Martin Fowler")).
 			OrderBy(false).
 			Execute()
 
@@ -216,7 +216,7 @@ func TestQuery_Pagination(t *testing.T) {
 
 		for {
 			builder := bookSchema.Query(fixture.Ctx).
-				Where("author", gardb.Eq("Same Author")).
+				WhereHash("author", gardb.Eq("Same Author")).
 				Limit(3)
 
 			if cursor != nil {
@@ -242,7 +242,7 @@ func TestQuery_Pagination(t *testing.T) {
 
 	t.Run("limit_respected", func(t *testing.T) {
 		result, err := bookSchema.Query(fixture.Ctx).
-			Where("author", gardb.Eq("Same Author")).
+			WhereHash("author", gardb.Eq("Same Author")).
 			Limit(5).
 			Execute()
 

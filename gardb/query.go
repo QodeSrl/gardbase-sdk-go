@@ -39,7 +39,7 @@ func (s *GardbSchema[T]) Query(ctx context.Context) *QueryBuilder[T] {
 	}
 }
 
-func (qb *QueryBuilder[T]) Where(field string, cond QueryCondition) *QueryBuilder[T] {
+func (qb *QueryBuilder[T]) WhereHash(field string, cond QueryCondition) *QueryBuilder[T] {
 	if cond.Op != objects.QueryEq {
 		panic("Where only supports equality conditions. Use WhereRange for range conditions.")
 	}
