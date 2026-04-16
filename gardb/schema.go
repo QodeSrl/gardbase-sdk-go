@@ -76,6 +76,27 @@ func (s *GardbSchema[T]) newInstance() T {
 	return reflect.New(s.typ).Interface().(T)
 }
 
+func (s *GardbSchema[T]) findIndexByHash(field string) ([]*objects.IndexName, bool) {
+	var matchingIndexes []*objects.IndexName
+	for i := range s.indexes {
+		idx := s.indexes[i]
+		if idx.HashField != field {
+			continue
+		}
+		matchingIndexes = append(matchingIndexes, idx)
+	}
+	return matchingIndexes, len(matchingIndexes) > 0
+}
+
+func (s *GardbSchema[T]) findIndexByRange(options []*objects.IndexName, field string) (*objects.IndexName, bool) {
+	for _, idx := range options {
+		if idx.RangeField != nil && *idx.RangeField == field {
+			return idx, true
+		}
+	}
+	return nil, false
+}
+
 func (s *GardbSchema[T]) containsHashKey(field string) bool {
 	return slices.ContainsFunc(s.indexes, func(idx *objects.IndexName) bool {
 		return idx.HashField == field
