@@ -48,7 +48,7 @@ func EncryptIndex(index Index, tableHash string, iek []byte) (objects.Index, err
 	tokenLength += len(encryptedHashVal)
 
 	encryptedRangeVal := []byte{}
-	if index.Name.RangeField != nil {
+	if index.Name.RangeField != nil && index.RangeValue != nil {
 		val, err := crypto.NormalizeValue(index.RangeValue)
 		if err != nil {
 			return idx, fmt.Errorf("%w: (index %s) failed to normalize range value: %v", gardbErrors.ErrValidation, indexNameForErrors, err)
@@ -122,4 +122,11 @@ func EncryptIndexForBetweenRange(index Index, tableHash string, betweenRange [2]
 	idx.TokenHash = encryptedHashVal
 
 	return idx, [2][]byte{encryptedBetweenRange[0], encryptedBetweenRange[1]}, nil
+}
+
+func PtrStr(s *string) string {
+	if s == nil {
+		return "<none>"
+	}
+	return *s
 }

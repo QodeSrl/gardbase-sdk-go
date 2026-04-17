@@ -12,16 +12,15 @@ import (
 )
 
 type QueryBuilder[T GardbObject] struct {
-	schema      *GardbSchema[T]
-	ctx         context.Context
-	hashKey     string
-	hashValue   any
-	rangeKey    string
-	rangeValue  any
-	rangeOp     objects.QueryOperator
-	limit       int
-	cursor      *string
-	scanForward bool
+	schema       *GardbSchema[T]
+	ctx          context.Context
+	indexOptions []*objects.IndexName // will be fixed to the first index that matches the query conditions at execute time
+	hashValue    any
+	rangeValue   any
+	rangeOp      objects.QueryOperator
+	limit        int
+	cursor       *string
+	scanForward  bool
 }
 
 type QueryOutput[T GardbObject] struct {
@@ -43,22 +42,25 @@ func (qb *QueryBuilder[T]) WhereHash(field string, cond QueryCondition) *QueryBu
 	if cond.Op != objects.QueryEq {
 		panic("Where only supports equality conditions. Use WhereRange for range conditions.")
 	}
-	hashExists := qb.schema.containsHashKey(field)
-	if !hashExists {
-		panic(fmt.Sprintf("no index found for field: %s", field))
+	indexes, exists := qb.schema.findIndexByHash(field)
+	if !exists {
+		panic(fmt.Sprintf("no index found for hash key: %s", field))
 	}
-
-	qb.hashKey = field
+	qb.indexOptions = append(qb.indexOptions, indexes...)
 	qb.hashValue = cond.Value
+	qb.rangeOp = objects.QueryEq
 	return qb
 }
 
 func (qb *QueryBuilder[T]) WhereRange(field string, cond QueryCondition) *QueryBuilder[T] {
-	hashAndRangeExists := qb.schema.containsHashAndRangeKey(qb.hashKey, field)
-	if !hashAndRangeExists {
-		panic(fmt.Sprintf("no index found for hash key: %s and range key: %s", qb.hashKey, field))
+	if len(qb.indexOptions) == 0 {
+		panic("WhereHash must be called before WhereRange to specify the hash key")
 	}
-	qb.rangeKey = field
+	index, exists := qb.schema.findIndexByRange(qb.indexOptions, field)
+	if !exists {
+		panic(fmt.Sprintf("no index found for range key: %s", field))
+	}
+	qb.indexOptions = []*objects.IndexName{index}
 	qb.rangeValue = cond.Value
 	qb.rangeOp = cond.Op
 	return qb
@@ -85,23 +87,36 @@ func (qb *QueryBuilder[T]) OrderBy(ascending bool) *QueryBuilder[T] {
 func (qb *QueryBuilder[T]) Execute() (*QueryOutput[T], error) {
 	const op = "Schema.Query.Execute"
 
-	if qb.hashKey == "" {
-		return nil, fmt.Errorf("%s: hash key must be specified", op)
-	}
-
 	if err := qb.schema.ensureTableIEK(qb.ctx); err != nil {
 		return nil, fmt.Errorf("%s: failed to ensure table IEK: %w", op, err)
 	}
 
-	indexName := objects.IndexName{
-		HashField:  qb.hashKey,
-		RangeField: &qb.rangeKey,
+	var indexName *objects.IndexName
+	if len(qb.indexOptions) == 0 {
+		return nil, fmt.Errorf("%s: no index specified for query", op)
+	} else if len(qb.indexOptions) == 1 {
+		indexName = qb.indexOptions[0]
+	} else {
+		if qb.rangeValue == nil {
+			indexName = &objects.IndexName{
+				HashField:  qb.indexOptions[0].HashField,
+				RangeField: nil,
+			}
+		} else {
+			for _, idx := range qb.indexOptions {
+				if idx.RangeField != nil && *idx.RangeField == *qb.indexOptions[0].RangeField {
+					indexName = idx
+					break
+				}
+			}
+			if indexName == nil {
+				return nil, fmt.Errorf("%s: no suitable index found for range query", op)
+			}
+		}
 	}
-	if qb.rangeKey == "" {
-		indexName.RangeField = nil
-	}
+
 	index := internal.Index{
-		Name:       indexName,
+		Name:       *indexName,
 		HashValue:  qb.hashValue,
 		RangeValue: qb.rangeValue,
 	}
