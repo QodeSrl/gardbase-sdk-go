@@ -201,8 +201,12 @@ func TestQuery_Pagination(t *testing.T) {
 			ISBN:        string(rune('1'+i)) + "00",
 			InStock:     true,
 		}
-		bookSchema.Put(fixture.Ctx, &books[i])
+		err := bookSchema.Put(fixture.Ctx, &books[i])
+		if err != nil {
+			t.Fatalf("Failed to put book: %v", err)
+		}
 		ids[i] = books[i].ID
+		time.Sleep(100 * time.Millisecond)
 	}
 	defer func() {
 		for _, id := range ids {
