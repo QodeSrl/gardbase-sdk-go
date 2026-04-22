@@ -6,9 +6,12 @@ import (
 )
 
 type TenantRoundTripper struct {
-	Base     http.RoundTripper
-	TenantID string
-	APIKey   string
+	Base                http.RoundTripper
+	TenantID            string
+	APIKey              string
+	MaxIdleConns        int
+	MaxIdleConnsPerHost int
+	IdleConnTimeout     time.Duration
 }
 
 func (t TenantRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -26,5 +29,14 @@ func (t TenantRoundTripper) base() http.RoundTripper {
 }
 
 func NewHttpClient(tenantID string, apiKey string, httpTimeout time.Duration) *http.Client {
-	return &http.Client{Timeout: httpTimeout, Transport: TenantRoundTripper{TenantID: tenantID, APIKey: apiKey}}
+	return &http.Client{
+		Timeout: httpTimeout,
+		Transport: TenantRoundTripper{
+			TenantID:            tenantID,
+			APIKey:              apiKey,
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 100,
+			IdleConnTimeout:     90 * time.Second,
+		},
+	}
 }
