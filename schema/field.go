@@ -111,7 +111,7 @@ func (f *Field) ExtractIntoValues(val reflect.Value, values *map[string]any, val
 	case reflect.Ptr, reflect.Interface:
 		isEmpty = val.IsNil()
 	default:
-		isEmpty = val.IsZero()
+		isEmpty = false // 0 is a valid value, never treat is as empty
 	}
 
 	if isEmpty {
@@ -119,10 +119,8 @@ func (f *Field) ExtractIntoValues(val reflect.Value, values *map[string]any, val
 			(*values)[tag] = f.defaultValue
 		} else if f.required {
 			valErrors.Add(tag, "field is required", nil)
-			return
-		} else {
-			return
 		}
+		return
 	} else {
 		if !f.TypeValidator(val.Interface()) {
 			valErrors.Add(tag, "invalid type", val.Interface())

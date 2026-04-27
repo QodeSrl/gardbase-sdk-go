@@ -13,8 +13,24 @@ func TestEdgeCases_DataTypes(t *testing.T) {
 	fixture := Setup(t)
 
 	t.Run("empty_string", func(t *testing.T) {
-		// TODO
-		t.Skip("Test for empty string data type not implemented yet")
+		bookSchema := fixture.CreateBookSchema(t)
+		book := Book{
+			Name:        "", // Empty string
+			Author:      "Author",
+			Pages:       100,
+			PublishedAt: time.Now(),
+			ISBN:        "empty-isbn",
+			InStock:     true,
+		}
+		err := bookSchema.Put(fixture.Ctx, &book)
+		if err != nil {
+			t.Fatalf("Failed to create book with empty string: %v", err)
+		}
+		defer bookSchema.Delete(fixture.Ctx, book.ID)
+		retrieved, _ := bookSchema.Get(fixture.Ctx, book.ID)
+		if retrieved.Name != "" {
+			t.Fatalf("Expected Name to be empty string, got '%s'", retrieved.Name)
+		}
 	})
 
 	t.Run("zero_values", func(t *testing.T) {
