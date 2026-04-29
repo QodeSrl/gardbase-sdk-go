@@ -104,18 +104,6 @@ func TestEdgeCases_DataTypes(t *testing.T) {
 	})
 }
 
-func TestEdgeCases_ObjectSize(t *testing.T) {
-	t.Run("object_near_100kb_threshold", func(t *testing.T) {
-		// TODO
-		t.Skip("Test for object size near 100KB threshold not implemented yet")
-	})
-
-	t.Run("large_object_over_100kb", func(t *testing.T) {
-		// TODO
-		t.Skip("Test for large object over 100KB not implemented yet")
-	})
-}
-
 func TestEdgeCases_Timestamps(t *testing.T) {
 	fixture := Setup(t)
 	bookSchema := fixture.CreateBookSchema(t)
