@@ -224,8 +224,6 @@ func TestCRUD_UpdateObject(t *testing.T) {
 		if err2 == nil {
 			t.Fatalf("Expected version conflict error on second update, got nil")
 		}
-
-		// TODO: check specifically for ErrVersionConflict
 	})
 }
 

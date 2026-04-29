@@ -40,6 +40,12 @@ type ScanOutput[T GardbObject] struct {
 func (s *GardbSchema[T]) Scan(ctx context.Context, config *ScanInput) (*ScanOutput[T], error) {
 	const op = "Schema.Scan"
 
+	if config == nil {
+		config = &ScanInput{
+			Limit: 100,
+		}
+	}
+
 	data, err := s.client.apiClient.Scan(ctx, s.tableHash, config.Limit, config.Cursor)
 	if err != nil {
 		if internal.IsContextError(err) {
