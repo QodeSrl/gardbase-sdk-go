@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QodeSrl/gardbase-sdk-go/gardb"
+	"github.com/qodesrl/gardbase-sdk-go/gardb"
 )
 
 func TestQuery_HashIndex(t *testing.T) {

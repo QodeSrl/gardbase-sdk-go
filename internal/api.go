@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
-	"github.com/QodeSrl/gardbase/pkg/api/objects"
-	"github.com/QodeSrl/gardbase/pkg/crypto"
+	"github.com/qodesrl/gardbase-sdk-go/gardb/errors"
+	"github.com/qodesrl/gardbase/pkg/api/objects"
+	"github.com/qodesrl/gardbase/pkg/crypto"
 )
 
 type APIClient struct {

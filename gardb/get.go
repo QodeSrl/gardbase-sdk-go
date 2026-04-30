@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
-	"github.com/QodeSrl/gardbase-sdk-go/internal"
-	"github.com/QodeSrl/gardbase/pkg/crypto"
+	"github.com/qodesrl/gardbase-sdk-go/gardb/errors"
+	"github.com/qodesrl/gardbase-sdk-go/internal"
+	"github.com/qodesrl/gardbase/pkg/crypto"
 )
 
 // Get retrieves a decrypted object from the database by its ID.

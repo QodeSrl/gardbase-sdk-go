@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QodeSrl/gardbase-sdk-go/gardb"
-	"github.com/QodeSrl/gardbase-sdk-go/schema"
+	"github.com/qodesrl/gardbase-sdk-go/gardb"
+	"github.com/qodesrl/gardbase-sdk-go/schema"
 )
 
 func TestTenant_TenantIsolation(t *testing.T) {

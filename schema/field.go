@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
+	"github.com/qodesrl/gardbase-sdk-go/gardb/errors"
 )
 
 type FieldType int

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QodeSrl/gardbase-sdk-go/schema"
+	"github.com/qodesrl/gardbase-sdk-go/schema"
 )
 
 type testLogger struct{}

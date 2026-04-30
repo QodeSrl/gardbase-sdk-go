@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QodeSrl/gardbase-sdk-go/gardb"
-	"github.com/QodeSrl/gardbase-sdk-go/schema"
-	"github.com/QodeSrl/gardbase/pkg/api/tenants"
+	"github.com/qodesrl/gardbase-sdk-go/gardb"
+	"github.com/qodesrl/gardbase-sdk-go/schema"
+	"github.com/qodesrl/gardbase/pkg/api/tenants"
 )
 
 type Book struct {
