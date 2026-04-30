@@ -21,6 +21,10 @@ Gardbase is a fully encrypted NoSQL DBaaS (Database-as-a-Service) built on AWS i
 go get github.com/qodesrl/gardbase-sdk-go
 ```
 
+```bash
+go get github.com/qodesrl/gardbase-sdk-go/gardb
+```
+
 ## Quick Start
 
 ### 1. Create a Gardbase Account
@@ -28,7 +32,7 @@ go get github.com/qodesrl/gardbase-sdk-go
 At the moment, you can create a tenant through the Gardbase API itself. Use the `CreateTenant` endpoint to set up your tenant and receive your unique Tenant ID and an API Key. (curl a POST request to /api/tenants/)
 
 ```bash
-curl -X POST https://api.gardbase.com/api/tenants/ -H "Content-Type: application/json"
+curl -i -X POST https://api.gardbase.com/api/tenants/ -H "Content-Type: application/json" -d '{}'
 ```
 
 ### 2. Initialize the Client
