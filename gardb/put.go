@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
-	"github.com/QodeSrl/gardbase-sdk-go/internal"
+	"github.com/qodesrl/gardbase-sdk-go/gardb/errors"
+	"github.com/qodesrl/gardbase-sdk-go/internal"
 )
 
 // Put stores an object in the GardBase database.

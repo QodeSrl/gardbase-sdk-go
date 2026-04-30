@@ -4,8 +4,8 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/QodeSrl/gardbase-sdk-go/gardb"
-	"github.com/QodeSrl/gardbase-sdk-go/schema"
+	"github.com/qodesrl/gardbase-sdk-go/gardb"
+	"github.com/qodesrl/gardbase-sdk-go/schema"
 )
 
 func TestLargeObjects_Lifecycle(t *testing.T) {

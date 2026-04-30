@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
-	"github.com/QodeSrl/gardbase-sdk-go/internal"
-	"github.com/QodeSrl/gardbase/pkg/api/objects"
-	"github.com/QodeSrl/gardbase/pkg/crypto"
+	"github.com/qodesrl/gardbase-sdk-go/gardb/errors"
+	"github.com/qodesrl/gardbase-sdk-go/internal"
+	"github.com/qodesrl/gardbase/pkg/api/objects"
+	"github.com/qodesrl/gardbase/pkg/crypto"
 )
 
 type QueryBuilder[T GardbObject] struct {

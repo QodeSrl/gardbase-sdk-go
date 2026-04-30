@@ -18,7 +18,7 @@ Gardbase is a fully encrypted NoSQL DBaaS (Database-as-a-Service) built on AWS i
 ## Installation
 
 ```bash
-go get github.com/QodeSrl/gardbase-sdk-go
+go get github.com/qodesrl/gardbase-sdk-go
 ```
 
 ## Quick Start
@@ -40,7 +40,7 @@ import (
     "context"
     "log"
 
-    "github.com/QodeSrl/gardbase-sdk-go/gardb"
+    "github.com/qodesrl/gardbase-sdk-go/gardb"
 )
 
 func main() {
@@ -705,8 +705,8 @@ import (
     "log"
     "time"
 
-    "github.com/QodeSrl/gardbase-sdk-go/gardb"
-    "github.com/QodeSrl/gardbase-sdk-go/schema"
+    "github.com/qodesrl/gardbase-sdk-go/gardb"
+    "github.com/qodesrl/gardbase-sdk-go/schema"
 )
 
 type User struct {

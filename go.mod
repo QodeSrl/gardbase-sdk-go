@@ -1,11 +1,11 @@
-module github.com/QodeSrl/gardbase-sdk-go
+module github.com/qodesrl/gardbase-sdk-go
 
 go 1.24.4
 
 require (
-	github.com/QodeSrl/gardbase/pkg/api v0.1.0
-	github.com/QodeSrl/gardbase/pkg/crypto v0.1.0
-	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.1.0
+	github.com/qodesrl/gardbase/pkg/api v0.1.0
+	github.com/qodesrl/gardbase/pkg/crypto v0.1.0
+	github.com/qodesrl/gardbase/pkg/enclaveproto v0.1.0
 	golang.org/x/crypto v0.47.0
 )
 
@@ -15,8 +15,8 @@ require (
 	golang.org/x/sys v0.40.0 // indirect
 )
 
-replace github.com/QodeSrl/gardbase/pkg/api => ../project/pkg/api
+replace github.com/qodesrl/gardbase/pkg/api => ../project/pkg/api
 
-replace github.com/QodeSrl/gardbase/pkg/crypto => ../project/pkg/crypto
+replace github.com/qodesrl/gardbase/pkg/crypto => ../project/pkg/crypto
 
-replace github.com/QodeSrl/gardbase/pkg/enclaveproto => ../project/pkg/enclaveproto
+replace github.com/qodesrl/gardbase/pkg/enclaveproto => ../project/pkg/enclaveproto

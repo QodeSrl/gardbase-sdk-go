@@ -1,6 +1,6 @@
 package gardb
 
-import "github.com/QodeSrl/gardbase/pkg/api/objects"
+import "github.com/qodesrl/gardbase/pkg/api/objects"
 
 type QueryCondition struct {
 	Op    objects.QueryOperator

@@ -7,10 +7,10 @@ import (
 	"slices"
 	"time"
 
-	"github.com/QodeSrl/gardbase-sdk-go/gardb/errors"
-	"github.com/QodeSrl/gardbase-sdk-go/internal"
-	"github.com/QodeSrl/gardbase-sdk-go/schema"
-	"github.com/QodeSrl/gardbase/pkg/api/objects"
+	"github.com/qodesrl/gardbase-sdk-go/gardb/errors"
+	"github.com/qodesrl/gardbase-sdk-go/internal"
+	"github.com/qodesrl/gardbase-sdk-go/schema"
+	"github.com/qodesrl/gardbase/pkg/api/objects"
 )
 
 type GardbSchema[T GardbObject] struct {
