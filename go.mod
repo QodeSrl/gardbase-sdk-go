@@ -3,9 +3,9 @@ module github.com/qodesrl/gardbase-sdk-go
 go 1.24.4
 
 require (
-	github.com/qodesrl/gardbase/pkg/api v0.1.0
-	github.com/qodesrl/gardbase/pkg/crypto v0.1.0
-	github.com/qodesrl/gardbase/pkg/enclaveproto v0.1.0
+	github.com/qodesrl/gardbase/pkg/api v0.1.1
+	github.com/qodesrl/gardbase/pkg/crypto v0.1.1
+	github.com/qodesrl/gardbase/pkg/enclaveproto v0.1.1
 	golang.org/x/crypto v0.47.0
 )
 
