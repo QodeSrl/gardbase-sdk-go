@@ -49,11 +49,11 @@ func EncryptIndex(index Index, tableHash string, iek []byte) (objects.Index, err
 
 	encryptedRangeVal := []byte{}
 	if index.Name.RangeField != nil && index.RangeValue != nil {
-		val, err := crypto.NormalizeValue(index.RangeValue)
+		val, err := crypto.NormalizeValueOPE(index.RangeValue)
 		if err != nil {
 			return idx, fmt.Errorf("%w: (index %s) failed to normalize range value: %v", gardbErrors.ErrValidation, indexNameForErrors, err)
 		}
-		encryptedRangeVal, err = crypto.EncryptObjectLinearOPE(val, iek)
+		encryptedRangeVal, err = crypto.EncryptObjectOPE(val, iek)
 		if err != nil {
 			return idx, fmt.Errorf("%w: (index %s) failed to encrypt range value: %v", gardbErrors.ErrEncryption, indexNameForErrors, err)
 		}
@@ -106,11 +106,11 @@ func EncryptIndexForBetweenRange(index Index, tableHash string, betweenRange [2]
 	encryptedBetweenRange := [2][]byte{}
 	if index.Name.RangeField != nil {
 		for i, val := range betweenRange {
-			normalizedVal, err := crypto.NormalizeValue(val)
+			normalizedVal, err := crypto.NormalizeValueOPE(val)
 			if err != nil {
 				return idx, [2][]byte{}, fmt.Errorf("%w: (index %s) failed to normalize between range value: %v", gardbErrors.ErrValidation, indexNameForErrors, err)
 			}
-			encryptedVal, err := crypto.EncryptObjectLinearOPE(normalizedVal, iek)
+			encryptedVal, err := crypto.EncryptObjectOPE(normalizedVal, iek)
 			if err != nil {
 				return idx, [2][]byte{}, fmt.Errorf("%w: (index %s) failed to encrypt between range value: %v", gardbErrors.ErrEncryption, indexNameForErrors, err)
 			}

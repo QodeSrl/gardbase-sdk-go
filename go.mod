@@ -3,13 +3,14 @@ module github.com/qodesrl/gardbase-sdk-go
 go 1.24.4
 
 require (
-	github.com/qodesrl/gardbase/pkg/api v0.1.0
-	github.com/qodesrl/gardbase/pkg/crypto v0.1.0
-	github.com/qodesrl/gardbase/pkg/enclaveproto v0.1.0
+	github.com/qodesrl/gardbase/pkg/api v0.1.1
+	github.com/qodesrl/gardbase/pkg/crypto v0.2.0
+	github.com/qodesrl/gardbase/pkg/enclaveproto v0.1.1
 	golang.org/x/crypto v0.47.0
 )
 
 require (
+	github.com/alessandrofoglia07/goope v0.1.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/sys v0.40.0 // indirect
